@@ -1,0 +1,5 @@
+{
+  "name": "AI Agent Orchestrator",
+  "description": "An AI orchestrator that uses 5 agents. 4 worker agents generate responses to a prompt, and a scorer agent evaluates them. The best response with a score of 8/10 or higher is presented to the user.",
+  "requestFramePermissions": []
+}
