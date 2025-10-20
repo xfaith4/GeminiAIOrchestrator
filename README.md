@@ -7,6 +7,85 @@ This project is a web-based demonstration of a multi-agent AI system designed to
 
 ![Screenshot of the Orchestrator UI](https://storage.googleapis.com/aistudio-project-manager-prod/gallery/2469493a10594396b27d3536341235b6/thumbnail.png)
 
+## 🚀 Getting Started
+
+Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes, or to deploy it to a live system.
+
+### Prerequisites
+
+-   **Node.js & npm:** Required to run a local web server. You can download it from [nodejs.org](https://nodejs.org/).
+-   **Git:** Required to clone the repository.
+-   **Google Gemini API Key:** The application uses the Gemini API to power its agents. You can get a key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### 🔑 API Key Configuration
+
+This application requires a Google Gemini API key to function. The key is accessed in the code via `process.env.API_KEY` within the `services/geminiService.ts` file.
+
+For the methods below, you will need to replace the placeholder with your actual API key.
+
+**❗️ IMPORTANT SECURITY NOTE:** Never commit your API key directly to your Git repository, especially if it's public. The methods described below for deployment involve embedding the key in the client-side code, which is not a secure practice for production applications. This is acceptable only for this demonstration tool, preferably in a private repository.
+
+---
+
+### Option 1: Running Locally (Recommended)
+
+Running a local development server is the most secure and recommended way to use this tool.
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>
+    cd <repository_directory>
+    ```
+
+2.  **Configure your API Key:**
+    For local development, the easiest method is to temporarily modify the service file.
+    -   Open the file `services/geminiService.ts`.
+    -   Find this line at the top of the file:
+        ```typescript
+        if (!process.env.API_KEY) {
+            throw new Error("API_KEY environment variable not set");
+        }
+        ```
+    -   Replace that block with your key directly, like this:
+        ```typescript
+        // if (!process.env.API_KEY) {
+        //     // throw new Error("API_KEY environment variable not set");
+        //     process.env.API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+        // }
+        ```
+    -   **Remember to undo this change before committing your code!**
+
+3.  **Launch the local server:**
+    From your terminal in the project's root directory, run one of the following commands:
+    ```bash
+    # Using npx (part of npm)
+    npx serve
+    ```
+    or if you have Python 3 installed:
+    ```bash
+    python -m http.server
+    ```
+    Now you can open your browser and navigate to the local address provided (e.g., `http://localhost:3000` or `http://localhost:8000`).
+
+---
+
+### Option 2: Deploying to GitHub Pages
+
+You can host this static application for free on GitHub Pages.
+
+1.  **Create a GitHub Repository:**
+    Push the project files to a new repository on your GitHub account. For security, it is highly recommended that you make this repository **private**.
+
+2.  **Embed your API Key:**
+    Follow the same steps as in "Option 1, Step 2" to hardcode your API key into the `services/geminiService.ts` file. This is necessary because GitHub Pages has no backend to securely store the key.
+    -   Commit this change and push it to your repository.
+
+3.  **Enable GitHub Pages:**
+    -   In your GitHub repository, go to `Settings` > `Pages`.
+    -   Under "Build and deployment", select the `Source` as `Deploy from a branch`.
+    -   Choose the `main` branch (or whichever branch you are using) and the `/ (root)` folder. Click `Save`.
+    -   After a few minutes, your site will be live at the URL provided by GitHub.
+
 ## ✨ Key Features
 
 -   **Goal-Oriented Planning:** You provide a high-level goal, and a **Supervisor** agent breaks it down into a logical, step-by-step plan.
