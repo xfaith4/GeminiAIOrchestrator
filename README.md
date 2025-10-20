@@ -13,15 +13,21 @@ Follow these instructions to get a copy of the project up and running on your lo
 
 ### Prerequisites
 
--   **Node.js & npm:** Required to run a local web server. You can download it from [nodejs.org](https://nodejs.org/).
+-   **Node.js & npm:** While not strictly required for a simple server, `npx` is used in the instructions. You can download it from [nodejs.org](https://nodejs.org/). A simple Python server also works.
 -   **Git:** Required to clone the repository.
 -   **Google Gemini API Key:** The application uses the Gemini API to power its agents. You can get a key from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
 ### 🔑 API Key Configuration
 
-This application requires a Google Gemini API key to function. The key is accessed in the code via `process.env.API_KEY` within the `services/geminiService.ts` file.
+This application requires a Google Gemini API key to function.
 
-For the methods below, you will need to replace the placeholder with your actual API key.
+1.  **Open the file `services/geminiService.ts`**.
+2.  At the very top of the file, you will find a placeholder constant:
+    ```typescript
+    const API_KEY = "YOUR_GEMINI_API_KEY"; 
+    ```
+3.  **Replace `"YOUR_GEMINI_API_KEY"`** with your actual Google Gemini API key.
+4.  **Save the file.**
 
 **❗️ IMPORTANT SECURITY NOTE:** Never commit your API key directly to your Git repository, especially if it's public. The methods described below for deployment involve embedding the key in the client-side code, which is not a secure practice for production applications. This is acceptable only for this demonstration tool, preferably in a private repository.
 
@@ -38,22 +44,7 @@ Running a local development server is the most secure and recommended way to use
     ```
 
 2.  **Configure your API Key:**
-    For local development, the easiest method is to temporarily modify the service file.
-    -   Open the file `services/geminiService.ts`.
-    -   Find this line at the top of the file:
-        ```typescript
-        if (!process.env.API_KEY) {
-            throw new Error("API_KEY environment variable not set");
-        }
-        ```
-    -   Replace that block with your key directly, like this:
-        ```typescript
-        // if (!process.env.API_KEY) {
-        //     // throw new Error("API_KEY environment variable not set");
-        //     process.env.API_KEY = "YOUR_GEMINI_API_KEY_HERE";
-        // }
-        ```
-    -   **Remember to undo this change before committing your code!**
+    Follow the **API Key Configuration** steps listed above.
 
 3.  **Launch the local server:**
     From your terminal in the project's root directory, run one of the following commands:
@@ -77,7 +68,7 @@ You can host this static application for free on GitHub Pages.
     Push the project files to a new repository on your GitHub account. For security, it is highly recommended that you make this repository **private**.
 
 2.  **Embed your API Key:**
-    Follow the same steps as in "Option 1, Step 2" to hardcode your API key into the `services/geminiService.ts` file. This is necessary because GitHub Pages has no backend to securely store the key.
+    Follow the same **API Key Configuration** steps above to hardcode your API key into the `services/geminiService.ts` file. This is necessary because GitHub Pages has no backend to securely store the key.
     -   Commit this change and push it to your repository.
 
 3.  **Enable GitHub Pages:**
