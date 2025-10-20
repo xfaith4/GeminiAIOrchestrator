@@ -1,7 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { WORKER_AGENTS } from '../constants';
-import { ScorerResult } from '../types';
+import { ScorerResult, WorkerAgent } from '../types';
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
@@ -9,23 +7,23 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-async function runWorkerAgent(prompt: string, systemInstruction: string): Promise<string> {
+async function runWorkerAgent(prompt: string, agent: WorkerAgent): Promise<string> {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: agent.model,
     contents: prompt,
     config: {
-      systemInstruction: systemInstruction,
+      systemInstruction: agent.systemInstruction,
     },
   });
   return response.text;
 }
 
-export async function getWorkerResponses(prompt: string): Promise<string[]> {
-  const promises = WORKER_AGENTS.map(agent => runWorkerAgent(prompt, agent.systemInstruction));
+export async function getWorkerResponses(prompt: string, agents: WorkerAgent[]): Promise<string[]> {
+  const promises = agents.map(agent => runWorkerAgent(prompt, agent));
   return Promise.all(promises);
 }
 
-export async function getScorerResponse(prompt: string, responses: string[]): Promise<ScorerResult[]> {
+export async function getScorerResponse(prompt: string, responses: string[], scorerModel: string): Promise<ScorerResult[]> {
   const scorerPrompt = `
     Original User Prompt: "${prompt}"
 
@@ -38,8 +36,6 @@ export async function getScorerResponse(prompt: string, responses: string[]): Pr
 
     Your task is to act as an impartial evaluator. Based on the original user prompt, score each of the provided responses on a scale of 1 to 10, where 1 is "not helpful at all" and 10 is "perfectly addresses the prompt". Provide a brief reasoning for each score. Return your evaluation in a JSON array format that matches the required schema.
   `;
-
-  const scorerModel = "gemini-2.5-pro";
 
   const response = await ai.models.generateContent({
     model: scorerModel,
