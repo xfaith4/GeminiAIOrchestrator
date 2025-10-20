@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { SendIcon, PaperClipIcon, XMarkIcon } from './icons';
-import { UploadedFile } from '../types';
+import { UploadedFile, PlanState } from '../types';
 
 interface GoalInputProps {
   goal: string;
@@ -10,9 +10,10 @@ interface GoalInputProps {
   uploadedFile: UploadedFile | null;
   setUploadedFile: (file: UploadedFile | null) => void;
   isSessionLoaded: boolean;
+  planState: PlanState;
 }
 
-const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoading, uploadedFile, setUploadedFile, isSessionLoaded }) => {
+const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoading, uploadedFile, setUploadedFile, isSessionLoaded, planState }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isParsing, setIsParsing] = useState(false);
 
@@ -35,7 +36,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
     try {
         let content = '';
         const extension = file.name.split('.').pop()?.toLowerCase() || '';
-        const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1'];
+        const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1', 'py', 'js', 'ts', 'md', 'txt'];
         
         if (extension === 'docx') {
             const arrayBuffer = await file.arrayBuffer();
@@ -50,7 +51,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
         } else if (textExtensions.includes(extension)) {
             content = await file.text();
         } else {
-            alert('Unsupported file type. Please upload a .docx, .xlsx, .csv, .json, .ps1, .psm1, or .psd1 file.');
+            alert('Unsupported file type.');
             return;
         }
         
@@ -67,7 +68,18 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
     }
   };
   
-  const isDisabled = isLoading || isSessionLoaded;
+  const isDisabled = isLoading || isSessionLoaded || planState !== 'idle';
+
+  const getPlaceholderText = () => {
+    if (isSessionLoaded) return "Viewing a past session. Start a new run to enter a goal.";
+    switch (planState) {
+        case 'generating': return "Supervisor is generating a plan...";
+        case 'awaitingApproval': return "Plan generated. Please review and approve below.";
+        case 'executing': return "Agents are executing the plan...";
+        case 'finished': return "Process finished. Start a new run to enter a new goal.";
+        default: return "Enter your high-level goal here... e.g., 'Review the code at https://github.com/owner/repo and suggest improvements.'";
+    }
+  };
 
   return (
     <div>
@@ -75,7 +87,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
         <textarea
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            placeholder={isSessionLoaded ? "Viewing a past session. Start a new run to enter a goal." : "Enter your high-level goal here... e.g., 'Write a report on the benefits of AI in the modern workplace.'"}
+            placeholder={getPlaceholderText()}
             className="w-full bg-base-200 border border-base-300 rounded-lg p-4 pr-28 text-content-100 placeholder-content-200 focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition-shadow resize-none"
             rows={3}
             disabled={isDisabled}
@@ -104,7 +116,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
-            accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1"
+            accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt"
             disabled={isDisabled || isParsing}
         />
         </form>

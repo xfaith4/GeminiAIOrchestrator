@@ -57,7 +57,7 @@ const SessionHistory: React.FC<SessionHistoryProps> = ({ sessions, onLoadSession
                     <p className="text-xs text-content-200 mt-1">
                         {new Date(session.timestamp).toLocaleString()}
                         {session.error && <span className="ml-2 text-red-400 font-semibold">Failed</span>}
-                        {session.artifact && <span className="ml-2 text-green-400 font-semibold">Completed</span>}
+                        {session.artifacts && <span className="ml-2 text-green-400 font-semibold">Completed</span>}
                     </p>
                     <div className="flex items-center gap-2 mt-3">
                         <button 

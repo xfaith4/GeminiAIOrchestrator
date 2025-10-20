@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { PlanStep, ReviewResult, StepExecutionResult, Agent } from '../types';
+import { PlanStep, ReviewResult, StepExecutionResult, Agent, Artifact } from '../types';
 import { 
     SUPERVISOR_INSTRUCTION, 
     SUPERVISOR_SCHEMA, 
@@ -7,6 +7,7 @@ import {
     REVIEWER_SCHEMA,
     getAgentInstruction,
     SYNTHESIZER_INSTRUCTION,
+    SYNTHESIZER_SCHEMA,
     FILE_SELECTION_SCHEMA
 } from '../constants';
 
@@ -28,7 +29,6 @@ async function getJsonResponse<T>(model: string, prompt: string, schema: object)
 
     try {
         let jsonStr = response.text.trim();
-        // Handle potential markdown wrapping
         if (jsonStr.startsWith('```json')) {
             jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
         }
@@ -57,8 +57,6 @@ export async function executeStep(step: PlanStep, context: string, retryReasonin
 
 export async function executeStepAsJson<T>(step: PlanStep, context: string, retryReasoning?: string): Promise<T> {
     const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
-    // Use a more powerful model for better adherence to JSON schema and complex instructions.
-    // For this specific tool, we know the schema it should use.
     return getJsonResponse<T>('gemini-2.5-pro', instruction, FILE_SELECTION_SCHEMA);
 }
 
@@ -75,14 +73,11 @@ export async function reviewStep(step: PlanStep, output: string, context: string
     return getJsonResponse<ReviewResult>('gemini-2.5-pro', fullPrompt, REVIEWER_SCHEMA);
 }
 
-export async function synthesizeFinalArtifact(context: string): Promise<string> {
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: context,
-        config: {
-            systemInstruction: SYNTHESIZER_INSTRUCTION,
-        },
-    });
-
-    return response.text;
+export async function synthesizeFinalArtifact(context: string): Promise<Artifact[]> {
+    const result = await getJsonResponse<{ artifacts: Artifact[] }>(
+        'gemini-2.5-pro',
+        context,
+        SYNTHESIZER_SCHEMA
+    );
+    return result.artifacts;
 }

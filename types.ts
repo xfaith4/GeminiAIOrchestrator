@@ -31,6 +31,8 @@ export interface PlanStep {
     toolInput?: Record<string, any>; // e.g., { "repoUrl": "..." }
 }
 
+export type PlanState = 'idle' | 'generating' | 'awaitingApproval' | 'executing' | 'finished';
+
 export interface LogEntry {
     timestamp: Date;
     agent: Agent;
@@ -53,6 +55,12 @@ export interface UploadedFile {
     content: string;
 }
 
+export interface Artifact {
+  name: string;
+  content: string;
+  language: 'markdown' | 'json' | 'javascript' | 'python' | 'text';
+}
+
 export interface Session {
     id: string;
     timestamp: number;
@@ -61,7 +69,7 @@ export interface Session {
     plan: PlanStep[];
     logEntries: LogEntry[];
     scratchpad: string;
-    artifact: string | null;
+    artifacts: Artifact[] | null;
     error: string | null;
 }
 
@@ -76,9 +84,9 @@ export interface OrchestrationParams {
   services: OrchestrationServices;
   onLog: (agent: Agent, message: string, type?: 'info' | 'warning' | 'error') => void;
   onPlanUpdate: (plan: PlanStep[]) => void;
-  onScratchpadUpdate: (scratchpad: string) => void;
+  onScratchpadUpdate: (scratchpad: string) => string; // Returns the current scratchpad
   onStepUpdate: (stepIndex: number) => void;
-  onFinalArtifact: (artifact: string) => void;
+  onFinalArtifact: (artifacts: Artifact[]) => void;
 }
 
 export interface TestResult {
