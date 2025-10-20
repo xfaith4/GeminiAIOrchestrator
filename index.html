@@ -4,18 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agentic AI Orchestrator</title>
+    <title>Agentic Workflow Orchestrator v2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['Roboto Mono', 'monospace'],
+            },
             colors: {
               'brand-primary': '#1e40af', // blue-800
               'brand-secondary': '#3b82f6', // blue-500
-              'base-100': '#1f2937', // gray-800
-              'base-200': '#374151', // gray-700
-              'base-300': '#4b5563', // gray-600
+              'base-100': '#111827', // gray-900
+              'base-200': '#1f2937', // gray-800
+              'base-300': '#374151', // gray-700
               'content-100': '#d1d5db', // gray-300
               'content-200': '#9ca3af', // gray-400
             }
@@ -23,6 +30,8 @@
         }
       }
     </script>
+    <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script type="importmap">
 {
   "imports": {

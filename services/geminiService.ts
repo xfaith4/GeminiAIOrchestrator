@@ -1,5 +1,13 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { ScorerResult, WorkerAgent } from '../types';
+import { GoogleGenAI } from "@google/genai";
+import { PlanStep, ReviewResult, StepExecutionResult, Agent } from '../types';
+import { 
+    SUPERVISOR_INSTRUCTION, 
+    SUPERVISOR_SCHEMA, 
+    REVIEWER_INSTRUCTION, 
+    REVIEWER_SCHEMA,
+    getAgentInstruction,
+    SYNTHESIZER_INSTRUCTION
+} from '../constants';
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
@@ -7,72 +15,67 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-async function runWorkerAgent(prompt: string, agent: WorkerAgent): Promise<string> {
-  const response = await ai.models.generateContent({
-    model: agent.model,
-    contents: prompt,
-    config: {
-      systemInstruction: agent.systemInstruction,
-    },
-  });
-  return response.text;
+async function getJsonResponse<T>(model: string, instruction: string, prompt: string, schema: object): Promise<T> {
+    const fullPrompt = `${instruction}\n\n---\n\nUser Goal/Context:\n"${prompt}"`;
+    const response = await ai.models.generateContent({
+        model: model,
+        contents: fullPrompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+        }
+    });
+
+    try {
+        let jsonStr = response.text.trim();
+        // Handle potential markdown wrapping
+        if (jsonStr.startsWith('```json')) {
+            jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+        }
+        return JSON.parse(jsonStr) as T;
+    } catch (error) {
+        console.error("Failed to parse JSON response:", response.text, error);
+        throw new Error("The AI model returned an invalid JSON format.");
+    }
 }
 
-export async function getWorkerResponses(prompt: string, agents: WorkerAgent[]): Promise<string[]> {
-  const promises = agents.map(agent => runWorkerAgent(prompt, agent));
-  return Promise.all(promises);
+export async function createPlan(goal: string): Promise<PlanStep[]> {
+    return getJsonResponse<PlanStep[]>('gemini-2.5-pro', SUPERVISOR_INSTRUCTION, goal, SUPERVISOR_SCHEMA);
 }
 
-export async function getScorerResponse(prompt: string, responses: string[], scorerModel: string): Promise<ScorerResult[]> {
-  const scorerPrompt = `
-    Original User Prompt: "${prompt}"
+export async function executeStep(step: PlanStep, context: string, retryReasoning?: string): Promise<StepExecutionResult> {
+    const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: instruction,
+        config: {
+            // Note: Using a single prompt in `contents` is often more effective than systemInstruction for this model
+        }
+    });
 
-    ---
+    return { output: response.text };
+}
 
-    Provided Responses:
-    ${responses.map((res, i) => `Response ${i + 1}:\n"${res}"`).join('\n\n')}
+export async function reviewStep(step: PlanStep, output: string, context: string): Promise<ReviewResult> {
+    const prompt = `
+        Original Task: "${step.task}"
+        Agent Output: "${output}"
+        ---
+        Full Context:
+        ${context}
+    `;
+    return getJsonResponse<ReviewResult>('gemini-2.5-pro', REVIEWER_INSTRUCTION, prompt, REVIEWER_SCHEMA);
+}
 
-    ---
-
-    Your task is to act as an impartial evaluator. Based on the original user prompt, score each of the provided responses on a scale of 1 to 10, where 1 is "not helpful at all" and 10 is "perfectly addresses the prompt". Provide a brief reasoning for each score. Return your evaluation in a JSON array format that matches the required schema.
-  `;
-
-  const response = await ai.models.generateContent({
-    model: scorerModel,
-    contents: scorerPrompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        description: 'An array of scores and reasonings for each response.',
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            score: {
-              type: Type.NUMBER,
-              description: 'A score from 1 to 10 for the response.',
-            },
-            reasoning: {
-              type: Type.STRING,
-              description: 'A brief justification for the assigned score.',
-            },
-          },
-          required: ['score', 'reasoning'],
+export async function synthesizeFinalArtifact(context: string): Promise<string> {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: context,
+        config: {
+            systemInstruction: SYNTHESIZER_INSTRUCTION,
         },
-      },
-    }
-  });
+    });
 
-  try {
-    let jsonStr = response.text.trim();
-    // It seems the API sometimes returns the JSON wrapped in markdown backticks
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-    }
-    const result = JSON.parse(jsonStr);
-    return result as ScorerResult[];
-  } catch (error) {
-    console.error("Failed to parse scorer response JSON:", response.text);
-    throw new Error("Could not parse the scorer agent's response. Please try again.");
-  }
+    return response.text;
 }
