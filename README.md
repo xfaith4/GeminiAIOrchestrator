@@ -9,33 +9,21 @@ This project is a web-based demonstration of a multi-agent AI system designed to
 
 ## 🚀 Getting Started
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes, or to deploy it to a live system.
+Follow these instructions to get a copy of the project up and running on your local machine.
 
 ### Prerequisites
 
--   **Node.js & npm:** While not strictly required for a simple server, `npx` is used in the instructions. You can download it from [nodejs.org](https://nodejs.org/). A simple Python server also works.
+-   **Development Server:** A local web server is needed to run the application. `npx serve` or Python's built-in server are good options.
 -   **Git:** Required to clone the repository.
--   **Google Gemini API Key:** The application uses the Gemini API to power its agents. You can get a key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+-   **Google Gemini API Key:** The application uses the Gemini API. Your API key must be available to the application as an environment variable.
 
 ### 🔑 API Key Configuration
 
-This application requires a Google Gemini API key to function.
+This application is designed to run in an environment where the Google Gemini API key is securely provided as an environment variable (`GEMINI_API_KEY`). The application's code will automatically use this key.
 
-1.  **Open the file `services/geminiService.ts`**.
-2.  At the very top of the file, you will find a placeholder constant:
-    ```typescript
-    const API_KEY = "YOUR_GEMINI_API_KEY"; 
-    ```
-3.  **Replace `"YOUR_GEMINI_API_KEY"`** with your actual Google Gemini API key.
-4.  **Save the file.**
+**Note on Local Development:** Simple static servers (like `python -m http.server` or `npx serve`) do not have a mechanism to inject environment variables into client-side JavaScript. This application is designed for platforms or build systems that can provide these variables at runtime.
 
-**❗️ IMPORTANT SECURITY NOTE:** Never commit your API key directly to your Git repository, especially if it's public. The methods described below for deployment involve embedding the key in the client-side code, which is not a secure practice for production applications. This is acceptable only for this demonstration tool, preferably in a private repository.
-
----
-
-### Option 1: Running Locally (Recommended)
-
-Running a local development server is the most secure and recommended way to use this tool.
+### Launching the Application
 
 1.  **Clone the repository:**
     ```bash
@@ -43,10 +31,10 @@ Running a local development server is the most secure and recommended way to use
     cd <repository_directory>
     ```
 
-2.  **Configure your API Key:**
-    Follow the **API Key Configuration** steps listed above.
+2.  **Ensure API Key is available:**
+    Make sure your execution environment is configured to provide the `GEMINI_API_KEY`.
 
-3.  **Launch the local server:**
+3.  **Launch a local server:**
     From your terminal in the project's root directory, run one of the following commands:
     ```bash
     # Using npx (part of npm)
@@ -57,25 +45,6 @@ Running a local development server is the most secure and recommended way to use
     python -m http.server
     ```
     Now you can open your browser and navigate to the local address provided (e.g., `http://localhost:3000` or `http://localhost:8000`).
-
----
-
-### Option 2: Deploying to GitHub Pages
-
-You can host this static application for free on GitHub Pages.
-
-1.  **Create a GitHub Repository:**
-    Push the project files to a new repository on your GitHub account. For security, it is highly recommended that you make this repository **private**.
-
-2.  **Embed your API Key:**
-    Follow the same **API Key Configuration** steps above to hardcode your API key into the `services/geminiService.ts` file. This is necessary because GitHub Pages has no backend to securely store the key.
-    -   Commit this change and push it to your repository.
-
-3.  **Enable GitHub Pages:**
-    -   In your GitHub repository, go to `Settings` > `Pages`.
-    -   Under "Build and deployment", select the `Source` as `Deploy from a branch`.
-    -   Choose the `main` branch (or whichever branch you are using) and the `/ (root)` folder. Click `Save`.
-    -   After a few minutes, your site will be live at the URL provided by GitHub.
 
 ## ✨ Key Features
 

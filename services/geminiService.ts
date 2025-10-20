@@ -11,26 +11,22 @@ import {
     FILE_SELECTION_SCHEMA
 } from '../constants';
 
-// ❗️ PASTE YOUR GEMINI API KEY HERE ❗️
-const API_KEY = "YOUR_GEMINI_API_KEY"; 
-// ------------------------------------
-
-if (API_KEY === "YOUR_GEMINI_API_KEY") {
-    // Display a clear error message on the page for the user to see.
+// The API key is expected to be available as an environment variable.
+if (!process.env.GEMINI_API_KEY) {
     const root = document.getElementById('root');
     if (root) {
         root.innerHTML = `
             <div style="font-family: sans-serif; padding: 2rem; text-align: center; color: #ff3333;">
                 <h1>Configuration Error</h1>
-                <p>Your Gemini API key has not been set.</p>
-                <p>Please open the <code>services/geminiService.ts</code> file and replace the placeholder <code>"YOUR_GEMINI_API_KEY"</code> with your actual key.</p>
+                <p>The <code>GEMINI_API_KEY</code> environment variable is not set.</p>
+                <p>This application requires a Google Gemini API key to be configured in the execution environment.</p>
             </div>
         `;
     }
-    throw new Error("API_KEY not set. Please add your Gemini API key to services/geminiService.ts");
+    throw new Error("GEMINI_API_KEY environment variable not set");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 async function getJsonResponse<T>(model: string, prompt: string, schema: object): Promise<T> {
     const response = await ai.models.generateContent({
