@@ -3,24 +3,41 @@ import { Type } from "@google/genai";
 
 export const AVAILABLE_AGENTS: Agent[] = ['Web Researcher', 'Data Analyst', 'Report Writer', 'Code Generator', 'GitHub Tool User'];
 
-export const SUPERVISOR_INSTRUCTION = `You are a Supervisor agent. Your role is to take a high-level user goal and create a detailed, sequential plan for other agents to execute. The user's prompt may include both a text goal and content from an uploaded file. You must use the file content as the primary context for creating the plan.
+export const SUPERVISOR_INSTRUCTION = `You are a Supervisor agent. Your role is to create a detailed, sequential plan to achieve a user's goal.
 
-Break the goal down into simple steps. Each step must have a clear task and be assigned to an appropriate agent. The available agents are: ${AVAILABLE_AGENTS.join(', ')}.
+Break the goal down into simple steps. Each step must have a clear task, an assigned agent, and, if applicable, a specific tool command.
 
-- **Web Researcher**: For tasks requiring web searches for up-to-date information.
-- **Data Analyst**: For tasks involving data manipulation, analysis, finding patterns, or calculations from the provided text or file content.
-- **Report Writer**: For tasks that require summarizing information, writing in a specific format (like a report or email), or synthesizing results into coherent text.
-- **Code Generator**: For tasks that require writing or analyzing code in any programming language.
-- **GitHub Tool User**: A specialized agent that uses a tool to interact with public GitHub repositories. Use it ONLY for tasks like "Fetch the file tree for the repository [URL]" or "Fetch the content of the file(s) [file paths] from the repository [URL]". This agent does not generate text; it retrieves data.
+**Available Agents:**
+- **Web Researcher**: For web searches.
+- **Data Analyst**: For data analysis and calculations.
+- **Report Writer**: For summarizing or formatting text.
+- **Code Generator**: For writing or analyzing code.
+- **GitHub Tool User**: A specialized agent that uses tools to interact with public GitHub repos.
 
-**GitHub Code Review Workflow:** If the goal is a code review of a GitHub repo, you MUST follow this plan structure:
-1. Use 'GitHub Tool User' to fetch the file tree.
-2. Use 'Code Generator' to analyze the file tree and select a small number of the most important files (max 5) to review.
-3. Use 'GitHub Tool User' to fetch the content of the selected files.
-4. Use 'Code Generator' to review the content of those files.
-5. Use 'Report Writer' to summarize the review into a final report.
+**Tool Commands:**
+Some agents use tools. When a tool is needed, you MUST specify it in the 'tool' and 'toolInput' fields.
+- To get a repository's file list:
+  - agent: 'GitHub Tool User'
+  - tool: 'github:getRepoTree'
+  - toolInput: { "repoUrl": "THE_FULL_URL" }
+- To select the most important files for a review (max 5):
+  - agent: 'Code Generator'
+  - tool: 'gemini:selectFiles'
+- To get the content of specific files:
+  - agent: 'GitHub Tool User'
+  - tool: 'github:getFilesContent'
+  - toolInput: { "repoUrl": "THE_FULL_URL" } // The previous step's output will provide the file paths.
+- For all other steps (e.g., analyzing content, writing reports), do NOT include a 'tool' field.
 
-Your output must be a valid JSON array following the provided schema. Do not create more than 5 steps. The plan must be logical and sequential.`;
+**GitHub Code Review Workflow Example:**
+If the goal is "review the repo at https://github.com/owner/repo", you MUST create a plan like this:
+1.  **Task**: "Fetch the file tree for the repository...". **Agent**: 'GitHub Tool User'. **Tool**: 'github:getRepoTree'.
+2.  **Task**: "Analyze the file tree and identify the 5 most important files...". **Agent**: 'Code Generator'. **Tool**: 'gemini:selectFiles'.
+3.  **Task**: "Fetch the content of the files identified...". **Agent**: 'GitHub Tool User'. **Tool**: 'github:getFilesContent'.
+4.  **Task**: "Review the content of those files for bugs...". **Agent**: 'Code Generator'. (No tool)
+5.  **Task**: "Summarize the review into a final report.". **Agent**: 'Report Writer'. (No tool)
+
+Your output must be a valid JSON array following the provided schema. Do not create more than 5 steps.`;
 
 export const SUPERVISOR_SCHEMA = {
   type: Type.ARRAY,
@@ -28,27 +45,38 @@ export const SUPERVISOR_SCHEMA = {
   items: {
     type: Type.OBJECT,
     properties: {
-      step: {
-        type: Type.NUMBER,
-        description: 'The step number, starting from 1.',
-      },
-      task: {
-        type: Type.STRING,
-        description: 'A clear, concise task for the assigned agent.',
-      },
-      agent: {
-        type: Type.STRING,
-        description: `The specialized agent assigned to this task. Must be one of: ${AVAILABLE_AGENTS.join(', ')}.`,
-      },
-      dependencies: {
-        type: Type.ARRAY,
-        description: 'For this workflow, always return an empty array.',
-        items: { type: Type.NUMBER },
+      step: { type: Type.NUMBER },
+      task: { type: Type.STRING },
+      agent: { type: Type.STRING, description: `Must be one of: ${AVAILABLE_AGENTS.join(', ')}.` },
+      dependencies: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+      tool: { type: Type.STRING, description: "Optional. The specific tool command to execute." },
+      toolInput: {
+        type: Type.OBJECT,
+        description: "Optional. Arguments for the tool. For GitHub tools, this must contain a 'repoUrl'.",
+        properties: {
+          repoUrl: {
+            type: Type.STRING,
+            description: "The full URL of the public GitHub repository, e.g., 'https://github.com/owner/repo'."
+          }
+        }
       },
     },
     required: ['step', 'task', 'agent', 'dependencies'],
   },
 };
+
+export const FILE_SELECTION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    files: {
+      type: Type.ARRAY,
+      description: 'An array of the most important file paths for the code review.',
+      items: { type: Type.STRING },
+    },
+  },
+  required: ['files'],
+};
+
 
 export const getAgentInstruction = (agent: Agent, task: string, context: string, retryReasoning?: string): string => {
   let retryInstruction = '';
@@ -97,5 +125,5 @@ export const REVIEWER_SCHEMA = {
 
 export const SYNTHESIZER_INSTRUCTION = `You are a Synthesizer agent. Your job is to review the entire scratchpad, which contains the user's goal and the approved outputs from all previous steps.
 Create a single, final, coherent artifact that directly addresses the user's original goal.
-Combine, summarize, and format the information from the scratchpad into a high-quality final answer.
-Do not describe your process, just provide the final artifact.`;
+**Your output MUST be in well-structured Markdown format.** Use headings, bullet points, bold text, and code blocks where appropriate to create a professional and readable document.
+Do not describe your process, just provide the final Markdown artifact.`;

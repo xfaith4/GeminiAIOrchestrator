@@ -22,7 +22,7 @@ interface TreeFile {
     type: 'blob' | 'tree';
 }
 
-export async function getRepoTree(repoUrl: string): Promise<TreeFile[]> {
+export async function getRepoTree({ repoUrl }: { repoUrl: string }): Promise<TreeFile[]> {
     const { owner, repo } = parseRepoUrl(repoUrl);
     // Using `recursive=1` to get all files in the repo.
     const apiUrl = `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/trees/main?recursive=1`;
@@ -42,7 +42,7 @@ interface FileContent {
     content: string;
 }
 
-export async function getFilesContent(repoUrl: string, paths: string[]): Promise<FileContent[]> {
+export async function getFilesContent({ repoUrl, paths }: { repoUrl: string, paths: string[] }): Promise<FileContent[]> {
     if (paths.length > MAX_FILES_TO_FETCH) {
         throw new Error(`Cannot fetch more than ${MAX_FILES_TO_FETCH} files at a time.`);
     }

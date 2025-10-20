@@ -50,6 +50,9 @@ const ReadmeModal: React.FC<ReadmeModalProps> = ({ onClose }) => {
                 <strong className="text-white">Goal-Oriented Planning:</strong> You provide a high-level goal, and a Supervisor agent breaks it down into a logical, step-by-step plan.
               </li>
               <li>
+                <strong className="text-white">File-based Context:</strong> Upload documents (`.docx`), spreadsheets (`.xlsx`, `.csv`), data files (`.json`), and PowerShell scripts (`.ps1`, `.psm1`, `.psd1`) to provide rich context for your goal.
+              </li>
+              <li>
                 <strong className="text-white">Specialized Agents & Tool Use:</strong> The plan is executed by a team of specialized agents. Some agents think (e.g., Report Writer), while others act by using tools (e.g., the `GitHub Tool User` can read from public repositories).
               </li>
               <li>

@@ -6,7 +6,8 @@ import {
     REVIEWER_INSTRUCTION, 
     REVIEWER_SCHEMA,
     getAgentInstruction,
-    SYNTHESIZER_INSTRUCTION
+    SYNTHESIZER_INSTRUCTION,
+    FILE_SELECTION_SCHEMA
 } from '../constants';
 
 if (!process.env.API_KEY) {
@@ -15,11 +16,10 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-async function getJsonResponse<T>(model: string, instruction: string, prompt: string, schema: object): Promise<T> {
-    const fullPrompt = `${instruction}\n\n---\n\nUser Goal/Context:\n"${prompt}"`;
+async function getJsonResponse<T>(model: string, prompt: string, schema: object): Promise<T> {
     const response = await ai.models.generateContent({
         model: model,
-        contents: fullPrompt,
+        contents: prompt,
         config: {
             responseMimeType: "application/json",
             responseSchema: schema,
@@ -40,7 +40,8 @@ async function getJsonResponse<T>(model: string, instruction: string, prompt: st
 }
 
 export async function createPlan(goal: string): Promise<PlanStep[]> {
-    return getJsonResponse<PlanStep[]>('gemini-2.5-pro', SUPERVISOR_INSTRUCTION, goal, SUPERVISOR_SCHEMA);
+    const fullPrompt = `${SUPERVISOR_INSTRUCTION}\n\n---\n\nUser Goal/Context:\n"${goal}"`;
+    return getJsonResponse<PlanStep[]>('gemini-2.5-pro', fullPrompt, SUPERVISOR_SCHEMA);
 }
 
 export async function executeStep(step: PlanStep, context: string, retryReasoning?: string): Promise<StepExecutionResult> {
@@ -49,23 +50,29 @@ export async function executeStep(step: PlanStep, context: string, retryReasonin
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: instruction,
-        config: {
-            // Note: Using a single prompt in `contents` is often more effective than systemInstruction for this model
-        }
     });
 
     return { output: response.text };
 }
 
+export async function executeStepAsJson<T>(step: PlanStep, context: string, retryReasoning?: string): Promise<T> {
+    const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
+    // Use a more powerful model for better adherence to JSON schema and complex instructions.
+    // For this specific tool, we know the schema it should use.
+    return getJsonResponse<T>('gemini-2.5-pro', instruction, FILE_SELECTION_SCHEMA);
+}
+
+
 export async function reviewStep(step: PlanStep, output: string, context: string): Promise<ReviewResult> {
-    const prompt = `
+    const promptContent = `
         Original Task: "${step.task}"
         Agent Output: "${output}"
         ---
         Full Context:
         ${context}
     `;
-    return getJsonResponse<ReviewResult>('gemini-2.5-pro', REVIEWER_INSTRUCTION, prompt, REVIEWER_SCHEMA);
+    const fullPrompt = `${REVIEWER_INSTRUCTION}\n\n---\n\nContext:\n"${promptContent}"`;
+    return getJsonResponse<ReviewResult>('gemini-2.5-pro', fullPrompt, REVIEWER_SCHEMA);
 }
 
 export async function synthesizeFinalArtifact(context: string): Promise<string> {

@@ -9,9 +9,10 @@ interface GoalInputProps {
   isLoading: boolean;
   uploadedFile: UploadedFile | null;
   setUploadedFile: (file: UploadedFile | null) => void;
+  isSessionLoaded: boolean;
 }
 
-const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoading, uploadedFile, setUploadedFile }) => {
+const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoading, uploadedFile, setUploadedFile, isSessionLoaded }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isParsing, setIsParsing] = useState(false);
 
@@ -33,7 +34,8 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
 
     try {
         let content = '';
-        const extension = file.name.split('.').pop()?.toLowerCase();
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1'];
         
         if (extension === 'docx') {
             const arrayBuffer = await file.arrayBuffer();
@@ -45,10 +47,10 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             content = window.XLSX.utils.sheet_to_csv(worksheet);
-        } else if (extension === 'csv') {
+        } else if (textExtensions.includes(extension)) {
             content = await file.text();
         } else {
-            alert('Unsupported file type. Please upload a .docx, .xlsx, or .csv file.');
+            alert('Unsupported file type. Please upload a .docx, .xlsx, .csv, .json, .ps1, .psm1, or .psd1 file.');
             return;
         }
         
@@ -64,6 +66,8 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
         }
     }
   };
+  
+  const isDisabled = isLoading || isSessionLoaded;
 
   return (
     <div>
@@ -71,16 +75,16 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
         <textarea
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            placeholder="Enter your high-level goal here... e.g., 'Write a report on the benefits of AI in the modern workplace.'"
+            placeholder={isSessionLoaded ? "Viewing a past session. Start a new run to enter a goal." : "Enter your high-level goal here... e.g., 'Write a report on the benefits of AI in the modern workplace.'"}
             className="w-full bg-base-200 border border-base-300 rounded-lg p-4 pr-28 text-content-100 placeholder-content-200 focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition-shadow resize-none"
             rows={3}
-            disabled={isLoading}
+            disabled={isDisabled}
         />
         <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-2">
             <button
             type="button"
             onClick={handleFileClick}
-            disabled={isLoading || isParsing}
+            disabled={isDisabled || isParsing}
             className="p-2 rounded-full text-content-200 hover:bg-base-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             aria-label="Attach file"
             >
@@ -88,7 +92,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
             </button>
             <button
             type="submit"
-            disabled={isLoading || !goal.trim()}
+            disabled={isDisabled || !goal.trim()}
             className="p-2 rounded-full bg-brand-secondary text-white hover:bg-brand-primary disabled:bg-base-300 disabled:cursor-not-allowed transition-colors"
             aria-label="Submit goal"
             >
@@ -100,8 +104,8 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
-            accept=".docx,.xlsx,.csv"
-            disabled={isLoading || isParsing}
+            accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1"
+            disabled={isDisabled || isParsing}
         />
         </form>
         {(isParsing || uploadedFile) && (
@@ -114,7 +118,7 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
                         <span className="text-content-100 truncate">{uploadedFile.name}</span>
                         <button 
                             onClick={() => setUploadedFile(null)}
-                            disabled={isLoading}
+                            disabled={isDisabled}
                             className="ml-auto p-1 rounded-full text-content-200 hover:bg-base-300 hover:text-white disabled:opacity-50"
                             aria-label="Remove file"
                         >
