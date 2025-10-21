@@ -1,9 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import { PlanStep, ReviewResult, StepExecutionResult, Agent, Artifact } from '../types';
-import { 
-    SUPERVISOR_INSTRUCTION, 
-    SUPERVISOR_SCHEMA, 
-    REVIEWER_INSTRUCTION, 
+import {
+    SUPERVISOR_INSTRUCTION,
+    SUPERVISOR_SCHEMA,
+    REVIEWER_INSTRUCTION,
     REVIEWER_SCHEMA,
     getAgentInstruction,
     SYNTHESIZER_INSTRUCTION,
@@ -11,25 +11,48 @@ import {
     FILE_SELECTION_SCHEMA
 } from '../constants';
 
-// The API key is expected to be available as an environment variable.
-if (!process.env.GEMINI_API_KEY) {
-    const root = document.getElementById('root');
-    if (root) {
-        root.innerHTML = `
-            <div style="font-family: sans-serif; padding: 2rem; text-align: center; color: #ff3333;">
-                <h1>Configuration Error</h1>
-                <p>The <code>GEMINI_API_KEY</code> environment variable is not set.</p>
-                <p>This application requires a Google Gemini API key to be configured in the execution environment.</p>
-            </div>
-        `;
+const hasDom = typeof document !== 'undefined';
+
+function resolveApiKey(): string {
+    const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY)
+        || process.env.GEMINI_API_KEY;
+
+    if (apiKey) {
+        return apiKey;
     }
-    throw new Error("GEMINI_API_KEY environment variable not set");
+
+    const errorMessage = "GEMINI_API_KEY environment variable not set";
+
+    if (hasDom) {
+        const root = document.getElementById('root');
+        if (root) {
+            root.innerHTML = `
+                <div style="font-family: sans-serif; padding: 2rem; text-align: center; color: #ff3333;">
+                    <h1>Configuration Error</h1>
+                    <p>The <code>GEMINI_API_KEY</code> environment variable is not set.</p>
+                    <p>This application requires a Google Gemini API key to be configured in the execution environment.</p>
+                </div>
+            `;
+        }
+    } else {
+        console.error(errorMessage);
+    }
+
+    throw new Error(errorMessage);
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let ai: GoogleGenAI | null = null;
+
+function getClient(): GoogleGenAI {
+    if (!ai) {
+        ai = new GoogleGenAI({ apiKey: resolveApiKey() });
+    }
+    return ai;
+}
 
 async function getJsonResponse<T>(model: string, prompt: string, schema: object): Promise<T> {
-    const response = await ai.models.generateContent({
+    const client = getClient();
+    const response = await client.models.generateContent({
         model: model,
         contents: prompt,
         config: {
@@ -57,8 +80,9 @@ export async function createPlan(goal: string): Promise<PlanStep[]> {
 
 export async function executeStep(step: PlanStep, context: string, retryReasoning?: string): Promise<StepExecutionResult> {
     const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
-    
-    const response = await ai.models.generateContent({
+
+    const client = getClient();
+    const response = await client.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: instruction,
     });
