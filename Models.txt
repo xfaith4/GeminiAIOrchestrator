@@ -1,0 +1,12 @@
+name                                             version displayName
+----                                             ------- -----------
+models/gemini-2.5-flash                          001     Gemini 2.5 Flash
+models/gemini-2.5-pro                            2.5     Gemini 2.5 Pro
+models/gemini-2.0-flash                          2.0     Gemini 2.0 Flash
+models/gemini-2.0-flash-001                      2.0     Gemini 2.0 Flash 001
+models/gemini-2.0-flash-lite-001                 2.0     Gemini 2.0 Flash-Lite 001
+models/gemini-2.0-flash-lite                     2.0     Gemini 2.0 Flash-Lite
+models/gemini-2.0-flash-preview-image-generation 2.0     Gemini 2.0 Flash Preview Image Generation
+models/gemini-2.5-flash-lite                     001     Gemini 2.5 Flash-Lite
+models/embedding-001                             001     Embedding 001
+models/text-embedding-004                        004     Text Embedding 004
