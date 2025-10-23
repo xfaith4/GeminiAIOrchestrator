@@ -1,3 +1,4 @@
+// ### BEGIN FILE: src/App.tsx
 import { useState, useEffect, useRef } from 'react';
 import GoalInput from './components/GoalInput';
 import PlanDisplay from './components/PlanDisplay';
@@ -9,7 +10,6 @@ import AgentLibraryModal from './components/AgentLibraryModal';
 import OrchestratorTestRunner from './components/OrchestratorTestRunner';
 import { InformationCircleIcon, OrchestratorIcon, BeakerIcon, SunIcon, MoonIcon } from './components/icons';
 
-// ✅ types.ts is in src/, so use './types'
 import {
   Agent,
   LogEntry,
@@ -22,37 +22,63 @@ import {
   PlanState,
 } from './types';
 
-// Real services live under src/services:
 import * as geminiService from './geminiService';
 import * as githubService from './githubService';
 
-// pick whichever mock filename you actually have (you have githubService.mock.ts)
+// For test runner mock
 import * as mockGithubService from './services/githubService.mock';
-// or: import * as mockGithubService from './services/__mocks__/githubService.mock';
-
 import { selectFiles } from './services/selectServices';
 
-{/* ### BEGIN: TailwindDebug */}
-<div className="m-4 rounded-lg border p-4 shadow">
-  <div className="mb-2 text-xs uppercase tracking-wider text-gray-500">Tailwind Check</div>
-  <div className="grid grid-cols-3 gap-2">
-    <div className="h-10 rounded bg-emerald-200"></div>
-    <div className="h-10 rounded bg-amber-200"></div>
-    <div className="h-10 rounded bg-sky-200"></div>
-  </div>
-</div>
-{/* ### END: TailwindDebug */}
+// --- Normalizers (conform external results to our local types) ---
 
-{/* ### BEGIN: TailwindDebug */}
-<div className="m-4 rounded-lg border p-4 shadow">
-  <div className="mb-2 text-xs uppercase tracking-wider text-gray-500">Tailwind Check</div>
-  <div className="grid grid-cols-3 gap-2">
-    <div className="h-10 rounded bg-emerald-200"></div>
-    <div className="h-10 rounded bg-amber-200"></div>
-    <div className="h-10 rounded bg-sky-200"></div>
-  </div>
-</div>
-{/* ### END: TailwindDebug */}
+// Narrow unknown to our Agent union
+const AGENTS: Agent[] = [
+  'Supervisor',
+  'Web Researcher',
+  'Data Analyst',
+  'Report Writer',
+  'Code Generator',
+  'GitHub Tool User',
+  'Reviewer',
+  'Synthesizer',
+  'Orchestrator',
+  'User',
+];
+
+function toAgent(v: any): Agent {
+  const s = String(v ?? '').trim();
+  const found = AGENTS.find(a => a.toLowerCase() === s.toLowerCase());
+  return found ?? 'Supervisor';
+}
+
+// Map filename → our Artifact["language"] union
+type Lang = Artifact['language'];
+function guessLanguageByFilename(name: string): Lang {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  switch (ext) {
+    case 'md':  return 'markdown';
+    case 'json':return 'json';
+    case 'js':
+    case 'jsx': return 'javascript';
+    case 'py':  return 'python';
+    default:    return 'text';
+  }
+}
+
+const toTypesPlanStep = (s: any, idx: number): PlanStep => ({
+  step: typeof s?.step === 'number' ? s.step : idx + 1,
+  task: String(s?.task ?? s),
+  agent: toAgent(s?.agent),
+  tool: s?.tool,
+  toolInput: s?.toolInput,
+  dependencies: Array.isArray(s?.dependencies) ? s.dependencies : [],
+});
+
+const toTypesArtifact = (f: any): Artifact => ({
+  name: String(f?.name ?? f?.filename ?? 'artifact.txt'),
+  content: String(f?.content ?? ''),
+  language: (f?.language as Lang) ?? guessLanguageByFilename(f?.name ?? f?.filename ?? ''),
+});
 
 const MAX_RETRIES = 2;
 
@@ -66,10 +92,8 @@ const runOrchestrationLogic = async ({
   onStepUpdate,
   onFinalArtifact,
 }: OrchestrationParams & { plan: PlanStep[] }): Promise<{ finalScratchpad: string; finalArtifacts: Artifact[] }> => {
-  // Initialize scratchpad
   let currentScratchpad = onScratchpadUpdate('');
 
-  // Seed context
   let context = `User Goal: ${goal}`;
   if (uploadedFile) {
     context += `\n\n--- FILE CONTENT (${uploadedFile.name}) ---\n${uploadedFile.content}`;
@@ -79,7 +103,6 @@ const runOrchestrationLogic = async ({
   currentScratchpad = `INITIAL CONTEXT:\n${context}\n\n`;
   onScratchpadUpdate(currentScratchpad);
 
-  // Plan execution
   onLog('Supervisor', `Executing a ${plan.length}-step plan.`);
 
   for (let i = 0; i < plan.length; i++) {
@@ -88,13 +111,11 @@ const runOrchestrationLogic = async ({
     onLog('Orchestrator', `Executing Step ${step.step}: ${step.task} (Agent: ${step.agent})`);
 
     let stepOutput = '';
-    let approved = false
+    let approved = false;
     let retryReasoning = '';
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        onLog('Orchestrator', `Retrying step (Attempt ${attempt})...`, 'warning');
-      }
+      if (attempt > 0) onLog('Orchestrator', `Retrying step (Attempt ${attempt})...`, 'warning');
 
       try {
         switch (step.tool) {
@@ -102,25 +123,22 @@ const runOrchestrationLogic = async ({
             if (!step.toolInput?.repoUrl) throw new Error('Missing repoUrl for getRepoTree tool.');
             onLog(step.agent, `Fetching file tree from ${step.toolInput.repoUrl}`);
             const tree = await services.github.getRepoTree({ repoUrl: step.toolInput.repoUrl });
-            stepOutput = `File tree fetched successfully. Total files: ${tree.length}.\n${JSON.stringify(
-              tree.map((f: { path: string }) => f.path),
+            stepOutput = JSON.stringify(
+              { message: `File tree fetched successfully. Total files: ${tree.length}.`, tree },
               null,
               2,
-            )}`;
+            );
             approved = true;
             break;
           }
           case 'gemini:selectFiles': {
-            // Get the file tree from the previous step
             const lastStepContent = currentScratchpad.split('--- STEP').pop() ?? '';
             const lastOutput = lastStepContent.split('OUTPUT ---')[1]?.split('--- END STEP')[0]?.trim();
             if (!lastOutput) throw new Error('Could not find output from previous step in scratchpad.');
+            const parsed = JSON.parse(lastOutput);
+            const tree = parsed.tree ?? parsed;
+            if (!tree || !Array.isArray(tree) || tree.length === 0) throw new Error('No file tree was provided by the previous step.');
 
-            const { tree } = JSON.parse(lastOutput);
-            if (!tree || !Array.isArray(tree) || tree.length === 0)
-              throw new Error('No file tree was provided by the previous step.');
-
-            // Use the selectServices to choose the most important files
             const result = await services.select.selectFiles(tree, currentScratchpad, step);
             stepOutput = JSON.stringify(result, null, 2);
             approved = true;
@@ -128,16 +146,12 @@ const runOrchestrationLogic = async ({
           }
           case 'github:getFilesContent': {
             if (!step.toolInput?.repoUrl) throw new Error('Missing repoUrl for getFilesContent tool.');
-
-            // Pull last step output from scratchpad
             const lastStepContent = currentScratchpad.split('--- STEP').pop() ?? '';
             const lastOutput = lastStepContent.split('OUTPUT ---')[1]?.split('--- END STEP')[0]?.trim();
             if (!lastOutput) throw new Error('Could not find output from previous step in scratchpad.');
-
             const { files: filePaths } = JSON.parse(lastOutput);
             if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0)
               throw new Error('No file paths were provided by the previous step to fetch.');
-
             onLog(step.agent, `Fetching content for ${filePaths.length} file(s)`);
             const contents = await services.github.getFilesContent({
               repoUrl: step.toolInput.repoUrl,
@@ -162,9 +176,7 @@ const runOrchestrationLogic = async ({
               approved = true;
             } else {
               retryReasoning = review.reasoning;
-              if (attempt < MAX_RETRIES) {
-                onLog('Orchestrator', `Step needs revision. Reason: ${review.reasoning}`, 'warning');
-              }
+              if (attempt < MAX_RETRIES) onLog('Orchestrator', `Step needs revision. Reason: ${review.reasoning}`, 'warning');
             }
           }
         }
@@ -189,10 +201,12 @@ const runOrchestrationLogic = async ({
 
   onStepUpdate(-1);
   onLog('Orchestrator', 'All steps completed. Synthesizing final artifact workspace...');
-  const artifacts = await services.gemini.synthesizeFinalArtifact(currentScratchpad);
-  onFinalArtifact(artifacts);
-  onLog('Synthesizer', `Final workspace created with ${artifacts.length} file(s).`);
-  return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts };
+ const artifactsRaw = await services.gemini.synthesizeFinalArtifact(currentScratchpad);
+const artifacts = artifactsRaw.map((f: any) => toTypesArtifact(f));
+onFinalArtifact(artifacts);
+onLog('Synthesizer', `Final workspace created with ${artifacts.length} file(s).`);
+return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts };
+
 };
 
 function App() {
@@ -210,16 +224,13 @@ function App() {
   const [isAgentLibraryVisible, setIsAgentLibraryVisible] = useState(false);
   const [testResults, setTestResults] = useState<TestResult | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check localStorage or system preference
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // We own the scroll container instead of passing ref into ActivityLog
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  // Apply theme changes
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -302,9 +313,7 @@ function App() {
     }
   };
 
-  const handleThemeToggle = () => {
-    setIsDarkMode(!isDarkMode);
-  };
+  const handleThemeToggle = () => setIsDarkMode(!isDarkMode);
 
   const handleStartPlanGeneration = async (userGoal: string) => {
     resetState();
@@ -327,8 +336,10 @@ function App() {
       }
       addLogEntry('User', context);
       addLogEntry('Orchestrator', 'Requesting plan from Supervisor...');
-      const createdPlan = await geminiService.createPlan(context);
-      setPlan(createdPlan);
+     const createdPlanRaw = await geminiService.createPlan(context);
+const createdPlan = createdPlanRaw.map((s: any, i: number) => toTypesPlanStep(s, i));
+setPlan(createdPlan);
+
       addLogEntry('Supervisor', `Created a ${createdPlan.length}-step plan. Awaiting user approval.`);
       setPlanState('awaitingApproval');
     } catch (error: any) {
@@ -368,9 +379,9 @@ function App() {
         goal,
         uploadedFile,
         plan,
-       services: { gemini: geminiService, github: githubService, select: { selectFiles } },
+        services: { gemini: geminiService, github: githubService, select: { selectFiles } },
         onLog: addLogEntry,
-        onPlanUpdate: setPlan, // not used inside runOrchestrationLogic, but harmless
+        onPlanUpdate: setPlan,
         onScratchpadUpdate: updateScratchpad,
         onStepUpdate: setCurrentStepIndex,
         onFinalArtifact: setFinalArtifacts,
@@ -405,11 +416,12 @@ function App() {
     const testLogs: LogEntry[] = [];
     let testError: string | null = null;
     try {
-      const testPlan = await geminiService.createPlan(testGoal);
-      await runOrchestrationLogic({
-        goal: testGoal,
-        uploadedFile: null,
-        plan: testPlan,
+      const testPlanRaw = await geminiService.createPlan(testGoal);
+const testPlan = testPlanRaw.map((s: any, i: number) => toTypesPlanStep(s, i));
+await runOrchestrationLogic({
+  goal: testGoal,
+  uploadedFile: null,
+  plan: testPlan,
         services: { gemini: geminiService, github: mockGithubService, select: { selectFiles } },
         onLog: (agent, message, type = 'info') => testLogs.push({ timestamp: new Date(), agent, message, type }),
         onPlanUpdate: () => {},
@@ -437,6 +449,7 @@ function App() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleThemeToggle}
             className="p-2 rounded-full text-content-200 hover:bg-base-300 hover:text-white transition-colors"
             aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
@@ -444,6 +457,7 @@ function App() {
             {isDarkMode ? <SunIcon className="w-6 h-6" /> : <MoonIcon className="w-6 h-6" />}
           </button>
           <button
+            type="button"
             onClick={() => setIsAgentLibraryVisible(true)}
             className="p-2 rounded-full text-content-200 hover:bg-base-300 hover:text-white transition-colors"
             aria-label="Show Agent Library"
@@ -451,15 +465,19 @@ function App() {
             <BeakerIcon className="w-6 h-6" />
           </button>
           <button
+            type="button"
             onClick={() => setIsReadmeVisible(true)}
             className="p-2 rounded-full text-content-200 hover:bg-base-300 hover:text-white transition-colors"
             aria-label="Show Read Me"
           >
             <InformationCircleIcon className="w-6 h-6" />
           </button>
+          {/* ### New Run button hardened: type=button, aria, click always fires, above overlays */}
           <button
+            type="button"
             onClick={handleNewRun}
-            className="px-4 py-2 text-sm bg-brand-secondary hover:bg-brand-primary text-white rounded-md transition-colors"
+            aria-label="Start a new run"
+            className="relative z-10 px-4 py-2 text-sm bg-brand-secondary hover:bg-brand-primary text-white rounded-md transition-colors"
           >
             New Run
           </button>
@@ -486,8 +504,6 @@ function App() {
               planState={planState}
               onApprovePlan={handleExecutePlan}
             />
-
-            {/* We own the scrollable container; ActivityLog stays dumb and ref-free */}
             <div className="rounded-md border border-base-300 overflow-auto" ref={logContainerRef}>
               <ActivityLog logEntries={logEntries} />
             </div>
@@ -508,7 +524,6 @@ function App() {
               scratchpad={scratchpad}
               finalArtifacts={finalArtifacts}
               isLoading={planState === 'executing' && plan.length > 0 && currentStepIndex === -1}
-              goal={goal}
             />
           </div>
           <OrchestratorTestRunner onRunTest={handleRunTestSuite} results={testResults} />
@@ -522,3 +537,4 @@ function App() {
 }
 
 export default App;
+// ### END FILE: src/App.tsx

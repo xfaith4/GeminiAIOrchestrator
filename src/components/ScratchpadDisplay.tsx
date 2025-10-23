@@ -14,7 +14,6 @@ interface ArtifactWorkspaceProps {
   scratchpad: string;
   finalArtifacts: Artifact[] | null;
   isLoading: boolean;
-  goal: string;
 }
 
 const getFileIcon = (lang: string) => {
@@ -27,7 +26,7 @@ const getFileIcon = (lang: string) => {
     }
 }
 
-const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading, goal }) => {
+const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading }) => {
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
 
   // FIX: Added useEffect to handle side effects, such as updating the selected artifact when finalArtifacts change.

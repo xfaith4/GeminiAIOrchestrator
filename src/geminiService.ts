@@ -1,126 +1,158 @@
-import { GoogleGenAI } from "@google/genai";
-import { PlanStep, ReviewResult, StepExecutionResult, Artifact } from './types';
-import {
-    SUPERVISOR_INSTRUCTION,
-    SUPERVISOR_SCHEMA,
-    REVIEWER_INSTRUCTION,
-    REVIEWER_SCHEMA,
-    getAgentInstruction,
-    SYNTHESIZER_INSTRUCTION,
-    SYNTHESIZER_SCHEMA,
-    FILE_SELECTION_SCHEMA
-} from '../constants';
+// ### BEGIN FILE: src/geminiService.ts
+// Browser-safe env access via Vite:
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+const API_VERSION = (import.meta.env.VITE_GEMINI_API_VERSION as string) ?? 'v1';
+const MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) ?? 'gemini-1.5-flash';
 
-const hasDom = typeof document !== 'undefined';
-
-function resolveApiKey(): string {
-    const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY)
-        || process.env.GEMINI_API_KEY;
-
-    if (apiKey) {
-        return apiKey;
-    }
-
-    const errorMessage = "GEMINI_API_KEY environment variable not set";
-
-    if (hasDom) {
-        const root = document.getElementById('root');
-        if (root) {
-            root.innerHTML = `
-                <div style="font-family: sans-serif; padding: 2rem; text-align: center; color: #ff3333;">
-                    <h1>Configuration Error</h1>
-                    <p>The <code>GEMINI_API_KEY</code> environment variable is not set.</p>
-                    <p>This application requires a Google Gemini API key to be configured in the execution environment.</p>
-                </div>
-            `;
-        }
-    } else {
-        console.error(errorMessage);
-    }
-
-    throw new Error(errorMessage);
+function requireKey() {
+  if (!API_KEY) throw new Error("Missing VITE_GEMINI_API_KEY in .env.local");
 }
 
-let ai: GoogleGenAI | null = null;
+// --- Types (match your app's expectations) ---
+export type PlanStep = {
+  step: number;
+  task: string;
+  agent: string;                // e.g., "Supervisor"
+  tool?: string | undefined;    // e.g., "github:getRepoTree"
+  toolInput?: any;
+};
 
-function getClient(): GoogleGenAI {
-    if (!ai) {
-        ai = new GoogleGenAI({ apiKey: resolveApiKey() });
-    }
-    return ai;
+// Util: basic POST to Gemini GenerateContent endpoint
+async function geminiGenerate(textPrompt: string) {
+  requireKey();
+  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${encodeURIComponent(MODEL)}:generateContent?key=${API_KEY}`;
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: textPrompt }] }],
+      generationConfig: { temperature: 0.3 },
+    }),
+  });
+
+ if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Gemini HTTP ${resp.status}: ${body}`);
+  }
+
+  const data = await resp.json();
+  const text =
+    data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join('') ??
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return String(text || '').trim();
 }
 
-async function getJsonResponse<T>(model: string, prompt: string, schema: object): Promise<T> {
-    const client = getClient();
-    const response = await client.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: schema,
-        }
+// Parse a numbered plan from a freeform LLM response into PlanStep[] (very tolerant)
+function parsePlanTextToSteps(planText: string): PlanStep[] {
+  // Expect lines like: "1. Do X (Agent: Supervisor)" but accept loose text
+  const lines = planText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const steps: PlanStep[] = [];
+
+  let n = 1;
+  for (const line of lines) {
+    // Try "1. Task (Agent: Name)" first
+    const m = line.match(/^\s*(\d+)[\.\)]\s+(.*?)(?:\s*\(Agent:\s*([^)]+)\))?\s*$/i);
+    if (m) {
+      const stepNum = Number(m[1]);
+      const task = m[2].trim();
+      const agent = (m[3]?.trim() || 'Supervisor');
+      steps.push({ step: stepNum, task, agent });
+      n = Math.max(n, stepNum + 1);
+      continue;
+    }
+
+    // Fallback: treat any non-empty line as next step
+    steps.push({
+      step: n++,
+      task: line,
+      agent: 'Supervisor',
     });
+  }
 
-    if (!response.text) {
-        throw new Error("The AI model returned an empty response.");
-    }
-
-    try {
-        let jsonStr = response.text.trim();
-        if (jsonStr.startsWith('```json')) {
-            jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
-        }
-        return JSON.parse(jsonStr) as T;
-    } catch (error) {
-        console.error("Failed to parse JSON response:", response.text, error);
-        throw new Error("The AI model returned an invalid JSON format.");
-    }
-}
-
-export async function createPlan(goal: string): Promise<PlanStep[]> {
-    const fullPrompt = `${SUPERVISOR_INSTRUCTION}\n\n---\n\nUser Goal/Context:\n"${goal}"`;
-    return getJsonResponse<PlanStep[]>('gemini-2.5-pro', fullPrompt, SUPERVISOR_SCHEMA);
-}
-
-export async function executeStep(step: PlanStep, context: string, retryReasoning?: string): Promise<StepExecutionResult> {
-    const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
-
-    const client = getClient();
-    const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: instruction,
+  // Last fallback if model returned nothing useful
+  if (steps.length === 0) {
+    steps.push({
+      step: 1,
+      task: 'Draft a short plan overview based on the goal and any provided file.',
+      agent: 'Supervisor',
     });
-
-    if (!response.text) {
-        throw new Error("The AI model returned an empty response.");
-    }
-
-    return { output: response.text };
+  }
+  return steps;
 }
 
-export async function executeStepAsJson<T>(step: PlanStep, context: string, retryReasoning?: string): Promise<T> {
-    const instruction = getAgentInstruction(step.agent, step.task, context, retryReasoning);
-    return getJsonResponse<T>('gemini-2.5-pro', instruction, FILE_SELECTION_SCHEMA);
+// Public API consumed by App.tsx and runOrchestrationLogic:
+
+// 1) Create a multi-step plan from context (goal + optional file content)
+export async function createPlan(context: string): Promise<PlanStep[]> {
+  const prompt =
+    `You are a Supervisor agent. Create a clear, numbered plan (3–6 steps). ` +
+    `Each line should be "N. Task (Agent: <one of Supervisor, Web Researcher, Data Analyst, Reviewer, Synthesizer>)".\n\n` +
+    `${context}`;
+
+  const raw = await geminiGenerate(prompt);
+  return parsePlanTextToSteps(raw);
 }
 
+// 2) Execute a step against the current scratchpad.
+// Return an object with an `output` string (your app logs it and decides approve/retry via reviewStep).
+export async function executeStep(
+  step: PlanStep,
+  scratchpad: string,
+  retryReasoning: string | undefined
+): Promise<{ output: string }> {
+  const prompt =
+    `You are the "${step.agent}" executing Step ${step.step}: "${step.task}".\n` +
+    (retryReasoning ? `A prior attempt failed. Fix it. Reason: ${retryReasoning}\n` : '') +
+    `Use the SCRATCHPAD for context and produce the best possible result.\n\n` +
+    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
 
-export async function reviewStep(step: PlanStep, output: string, context: string): Promise<ReviewResult> {
-    const promptContent = `
-        Original Task: "${step.task}"
-        Agent Output: "${output}"
-        ---
-        Full Context:
-        ${context}
-    `;
-    const fullPrompt = `${REVIEWER_INSTRUCTION}\n\n---\n\nContext:\n"${promptContent}"`;
-    return getJsonResponse<ReviewResult>('gemini-2.5-pro', fullPrompt, REVIEWER_SCHEMA);
+  const output = await geminiGenerate(prompt);
+  return { output };
 }
 
-export async function synthesizeFinalArtifact(context: string): Promise<Artifact[]> {
-    const result = await getJsonResponse<{ artifacts: Artifact[] }>(
-        'gemini-2.5-pro',
-        SYNTHESIZER_INSTRUCTION + '\n\n--- SCRATCHPAD CONTEXT ---\n' + context,
-        SYNTHESIZER_SCHEMA
-    );
-    return result.artifacts;
+// 3) Review a step output and decide APPROVE or REVISE with reasoning
+export async function reviewStep(
+  step: PlanStep,
+  stepOutput: string,
+  scratchpad: string
+): Promise<{ decision: 'APPROVE' | 'REVISE'; reasoning: string }> {
+  const prompt =
+    `You are a strict Reviewer. Evaluate the output for Step ${step.step} ("${step.task}"). ` +
+    `Return ONLY one of the words APPROVE or REVISE on the first line, then a one-sentence reason on the next line.\n\n` +
+    `--- OUTPUT ---\n${stepOutput}\n--- END OUTPUT ---\n\n` +
+    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
+
+  const raw = await geminiGenerate(prompt);
+  const [first, ...rest] = raw.split(/\r?\n/);
+  const decision = /^approve/i.test(first ?? '') ? 'APPROVE' : 'REVISE';
+  const reasoning = (rest.join(' ').trim() || 'No reasoning provided.').slice(0, 500);
+  return { decision, reasoning };
 }
+
+// 4) Synthesize final artifacts from the scratchpad
+export async function synthesizeFinalArtifact(
+  scratchpad: string
+): Promise<Array<{ filename: string; content: string }>> {
+  const prompt =
+    `Create final useful artifacts from the SCRATCHPAD. If code is relevant, return a short README and one code file. ` +
+    `Return the result as two blocks:\n` +
+    `--- FILENAME: <name> ---\n<content>\n--- END FILE ---\n(repeat for any additional files)\n\n` +
+    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
+
+  const raw = await geminiGenerate(prompt);
+
+  // Very lenient block parser
+  const files: Array<{ filename: string; content: string }> = [];
+  const regex = /---\s*FILENAME:\s*([^\n]+)\s*---\s*([\s\S]*?)---\s*END FILE\s*---/gi;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(raw)) !== null) {
+    files.push({ filename: m[1].trim(), content: m[2].trim() });
+  }
+
+  if (files.length === 0) {
+    files.push({ filename: 'README.txt', content: raw || 'No artifacts produced.' });
+  }
+  return files;
+}
+// ### END FILE: src/geminiService.ts
