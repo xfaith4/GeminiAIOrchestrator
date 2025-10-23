@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { PlanStep, ReviewResult, StepExecutionResult, Agent, Artifact } from '../types';
+import { PlanStep, ReviewResult, StepExecutionResult, Artifact } from './types';
 import {
     SUPERVISOR_INSTRUCTION,
     SUPERVISOR_SCHEMA,
@@ -61,6 +61,10 @@ async function getJsonResponse<T>(model: string, prompt: string, schema: object)
         }
     });
 
+    if (!response.text) {
+        throw new Error("The AI model returned an empty response.");
+    }
+
     try {
         let jsonStr = response.text.trim();
         if (jsonStr.startsWith('```json')) {
@@ -86,6 +90,10 @@ export async function executeStep(step: PlanStep, context: string, retryReasonin
         model: 'gemini-2.5-flash',
         contents: instruction,
     });
+
+    if (!response.text) {
+        throw new Error("The AI model returned an empty response.");
+    }
 
     return { output: response.text };
 }

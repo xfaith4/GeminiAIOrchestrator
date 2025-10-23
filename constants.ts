@@ -1,4 +1,4 @@
-import { Agent } from "./types";
+import { Agent } from "./src/types";
 import { Type } from "@google/genai";
 
 export const AVAILABLE_AGENTS: Agent[] = ['Web Researcher', 'Data Analyst', 'Report Writer', 'Code Generator', 'GitHub Tool User'];

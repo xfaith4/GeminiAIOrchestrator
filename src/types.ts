@@ -1,5 +1,5 @@
-import * as geminiService from './services/geminiService';
-import * as githubService from './services/githubService';
+import * as geminiService from './geminiService';
+import * as githubService from './githubService';
 
 // This makes TypeScript aware of the external libraries loaded via script tags in index.html
 declare global {
@@ -76,6 +76,9 @@ export interface Session {
 export interface OrchestrationServices {
   gemini: typeof geminiService;
   github: typeof githubService;
+  select: {
+    selectFiles: (fileTree: Array<{ path: string; type: string }>, context: string, step: any) => Promise<{ files: string[] }>;
+  };
 }
 
 export interface OrchestrationParams {

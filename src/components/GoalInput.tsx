@@ -83,43 +83,40 @@ const GoalInput: React.FC<GoalInputProps> = ({ goal, setGoal, onSubmit, isLoadin
 
   return (
     <div>
-        <form onSubmit={handleFormSubmit} className="relative">
-        <textarea
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            placeholder={getPlaceholderText()}
-            className="w-full bg-base-200 border border-base-300 rounded-lg p-4 pr-28 text-content-100 placeholder-content-200 focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition-shadow resize-none"
-            rows={3}
-            disabled={isDisabled}
-        />
-        <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-2">
-            <button
-            type="button"
-            onClick={handleFileClick}
-            disabled={isDisabled || isParsing}
-            className="p-2 rounded-full text-content-200 hover:bg-base-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            aria-label="Attach file"
-            >
-            <PaperClipIcon className="w-6 h-6" />
-            </button>
-            <button
-            type="submit"
-            disabled={isDisabled || !goal.trim()}
-            className="p-2 rounded-full bg-brand-secondary text-white hover:bg-brand-primary disabled:bg-base-300 disabled:cursor-not-allowed transition-colors"
-            aria-label="Submit goal"
-            >
-            <SendIcon className="w-6 h-6" />
-            </button>
-        </div>
-        <input 
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt"
-            disabled={isDisabled || isParsing}
-        />
-        </form>
+<form className="relative" onSubmit={(e) => e.preventDefault()}>
+  <label htmlFor="goal" className="sr-only">High-level goal</label>
+
+  <textarea
+    id="goal"            // important for accessibility
+    name="goal"          // important for autofill/form semantics
+    placeholder={getPlaceholderText()}
+    rows={3}
+    className="w-full bg-base-200 border border-base-300 rounded-lg p-4 pr-28 text-content-100 placeholder-content-200 focus:ring-2 focus:ring-brand-secondary focus:border-transparent transition-shadow resize-none"
+    autoComplete="off"
+    aria-label="High-level goal"
+    // If you’re controlling state, keep your existing value/onChange props:
+    // value={goal}
+    // onChange={(e) => setGoal(e.target.value)}
+  />
+
+  <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-2">
+    <label htmlFor="attachments" className="inline-flex items-center gap-2 cursor-pointer">
+      <span className="sr-only">Attach files</span>
+      <input
+        id="attachments"    // matches label htmlFor
+        name="attachments"  // gives the field a form name
+        type="file"
+        className="hidden"
+        multiple
+        accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt"
+        aria-label="Attachments"
+        onChange={handleFileChange}
+      />
+      <PaperClipIcon className="w-5 h-5 text-content-200 hover:text-content-100 transition-colors" />
+    </label>
+  </div>
+</form>
+
         {(isParsing || uploadedFile) && (
             <div className="mt-2">
                 {isParsing ? (
