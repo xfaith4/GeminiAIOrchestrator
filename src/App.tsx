@@ -9,6 +9,8 @@ import ReadmeModal from './components/ReadmeModal';
 import AgentLibraryModal from './components/AgentLibraryModal';
 import OrchestratorTestRunner from './components/OrchestratorTestRunner';
 import { InformationCircleIcon, OrchestratorIcon, BeakerIcon, SunIcon, MoonIcon } from './components/icons';
+import { appendRun } from './storage/costLedger';
+
 
 import {
   Agent,
@@ -61,6 +63,23 @@ function guessLanguageByFilename(name: string): Lang {
     case 'js':
     case 'jsx': return 'javascript';
     case 'py':  return 'python';
+    case 'sql':
+    case 'sqlite':
+    case 'db': return 'sql';
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+    case 'svg':
+    case 'bmp':
+    case 'ico': return 'image';
+    case 'mp4':
+    case 'webm':
+    case 'avi':
+    case 'mov':
+    case 'mkv':
+    case 'flv': return 'video';
     default:    return 'text';
   }
 }
@@ -91,6 +110,7 @@ const runOrchestrationLogic = async ({
   onScratchpadUpdate,
   onStepUpdate,
   onFinalArtifact,
+  onCost,
 }: OrchestrationParams & { plan: PlanStep[] }): Promise<{ finalScratchpad: string; finalArtifacts: Artifact[] }> => {
   let currentScratchpad = onScratchpadUpdate('');
 
@@ -166,10 +186,13 @@ const runOrchestrationLogic = async ({
           default: {
             const result = await services.gemini.executeStep(step, currentScratchpad, retryReasoning);
             stepOutput = result.output;
+            if (result.cost && onCost) onCost(result.cost.totalUSD, String(step.step));
+
             onLog(step.agent, `Output:\n${stepOutput}`);
 
             onLog('Orchestrator', `Requesting review of step ${step.step} output...`);
             const review = await services.gemini.reviewStep(step, stepOutput, currentScratchpad);
+            if (review.cost && onCost) onCost(review.cost.totalUSD, `review-${step.step}`);
             onLog('Reviewer', `Decision: ${review.decision}. Reasoning: ${review.reasoning}`);
 
             if (review.decision === 'APPROVE') {
@@ -201,8 +224,9 @@ const runOrchestrationLogic = async ({
 
   onStepUpdate(-1);
   onLog('Orchestrator', 'All steps completed. Synthesizing final artifact workspace...');
- const artifactsRaw = await services.gemini.synthesizeFinalArtifact(currentScratchpad);
-const artifacts = artifactsRaw.map((f: any) => toTypesArtifact(f));
+const synth = await services.gemini.synthesizeFinalArtifactWithMeta(currentScratchpad);
+const artifacts = synth.artifacts.map((f: any) => toTypesArtifact(f));
+if (synth.cost && onCost) onCost(synth.cost.totalUSD, "synthesize");
 onFinalArtifact(artifacts);
 onLog('Synthesizer', `Final workspace created with ${artifacts.length} file(s).`);
 return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts };
@@ -211,6 +235,7 @@ return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts };
 
 function App() {
   const [goal, setGoal] = useState('');
+  const [sessionCostUSD, setSessionCostUSD] = useState(0);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [plan, setPlan] = useState<PlanStep[]>([]);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
@@ -271,6 +296,7 @@ function App() {
     setFinalArtifacts(null);
     setPlanState('idle');
     setCurrentStepIndex(-1);
+    setSessionCostUSD(0);
   };
 
   const saveSession = (data: Omit<Session, 'id' | 'timestamp'>) => {
@@ -336,10 +362,15 @@ function App() {
       }
       addLogEntry('User', context);
       addLogEntry('Orchestrator', 'Requesting plan from Supervisor...');
-     const createdPlanRaw = await geminiService.createPlan(context);
-const createdPlan = createdPlanRaw.map((s: any, i: number) => toTypesPlanStep(s, i));
-setPlan(createdPlan);
+    const planResp = await geminiService.createPlanWithMeta(context);
+const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i));
+if (planResp.cost && newSessionId) {
+  const cost = planResp.cost.totalUSD;
+  appendRun(newSessionId, { totalUSD: cost, stepId: "plan" });
+  setSessionCostUSD(prev => prev + cost);
+}
 
+      setPlan(createdPlan);
       addLogEntry('Supervisor', `Created a ${createdPlan.length}-step plan. Awaiting user approval.`);
       setPlanState('awaitingApproval');
     } catch (error: any) {
@@ -375,17 +406,21 @@ setPlan(createdPlan);
     };
 
     try {
-      const { finalScratchpad, finalArtifacts } = await runOrchestrationLogic({
-        goal,
-        uploadedFile,
-        plan,
-        services: { gemini: geminiService, github: githubService, select: { selectFiles } },
-        onLog: addLogEntry,
-        onPlanUpdate: setPlan,
-        onScratchpadUpdate: updateScratchpad,
-        onStepUpdate: setCurrentStepIndex,
-        onFinalArtifact: setFinalArtifacts,
-      });
+     const { finalScratchpad, finalArtifacts } = await runOrchestrationLogic({
+  goal,
+  uploadedFile,
+  plan,
+  services: { gemini: geminiService, github: githubService, select: { selectFiles } },
+  onLog: addLogEntry,
+  onScratchpadUpdate: updateScratchpad,
+  onStepUpdate: setCurrentStepIndex,
+  onFinalArtifact: setFinalArtifacts,
+  onCost: (cost, stepId) => {
+    if (activeSessionId) appendRun(activeSessionId, { totalUSD: cost, stepId });
+    setSessionCostUSD(prev => prev + cost);
+  },
+});
+
       setPlanState('finished');
       saveSession({
         goal,
@@ -416,18 +451,24 @@ setPlan(createdPlan);
     const testLogs: LogEntry[] = [];
     let testError: string | null = null;
     try {
-      const testPlanRaw = await geminiService.createPlan(testGoal);
-const testPlan = testPlanRaw.map((s: any, i: number) => toTypesPlanStep(s, i));
-await runOrchestrationLogic({
-  goal: testGoal,
-  uploadedFile: null,
-  plan: testPlan,
+      const context = `User Goal: ${testGoal}`;
+      const planResp = await geminiService.createPlanWithMeta(context);
+      const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i));
+      if (planResp.cost) {
+        const cost = planResp.cost.totalUSD;
+        // Note: Not adding to session cost for tests
+      }
+
+      await runOrchestrationLogic({
+        goal: testGoal,
+        uploadedFile: null,
+        plan: createdPlan,
         services: { gemini: geminiService, github: mockGithubService, select: { selectFiles } },
         onLog: (agent, message, type = 'info') => testLogs.push({ timestamp: new Date(), agent, message, type }),
-        onPlanUpdate: () => {},
         onScratchpadUpdate: () => '',
         onStepUpdate: () => {},
         onFinalArtifact: () => {},
+        onCost: () => {}, // No-op for tests
       });
     } catch (e: any) {
       testError = e.message;
@@ -481,6 +522,10 @@ await runOrchestrationLogic({
           >
             New Run
           </button>
+          <span className="ml-2 px-3 py-1 rounded-md bg-base-300 text-xs tabular-nums">
+  Est. cost: ${sessionCostUSD.toFixed(4)}
+</span>
+
         </div>
       </header>
 

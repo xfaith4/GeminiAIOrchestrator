@@ -46,7 +46,9 @@ const GoalInput: React.FC<GoalInputProps> = ({
     try {
       let content = '';
       const extension = file.name.split('.').pop()?.toLowerCase() || '';
-      const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1', 'py', 'js', 'ts', 'md', 'txt'];
+      const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1', 'py', 'js', 'ts', 'md', 'txt', 'sql', 'sqlite', 'db'];
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'];
+      const videoExtensions = ['mp4', 'webm', 'avi', 'mov', 'mkv', 'flv'];
 
       if (extension === 'docx') {
         const arrayBuffer = await file.arrayBuffer();
@@ -58,6 +60,14 @@ const GoalInput: React.FC<GoalInputProps> = ({
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         content = (window as any).XLSX.utils.sheet_to_csv(worksheet);
+      } else if (imageExtensions.includes(extension) || videoExtensions.includes(extension)) {
+        // Handle images and videos as base64 data URLs
+        content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
       } else if (textExtensions.includes(extension)) {
         content = await file.text();
       } else {
@@ -124,7 +134,7 @@ const GoalInput: React.FC<GoalInputProps> = ({
               type="file"
               className="hidden"
               multiple
-              accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt"
+              accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt,.sql,.sqlite,.db"
               aria-label="Attachments"
               onChange={handleFileChange}
               disabled={isDisabled}

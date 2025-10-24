@@ -58,7 +58,7 @@ export interface UploadedFile {
 export interface Artifact {
   name: string;
   content: string;
-  language: 'markdown' | 'json' | 'javascript' | 'python' | 'text';
+  language: 'markdown' | 'json' | 'javascript' | 'python' | 'sql' | 'image' | 'video' | 'text';
 }
 
 export interface Session {
@@ -86,10 +86,25 @@ export interface OrchestrationParams {
   uploadedFile: UploadedFile | null;
   services: OrchestrationServices;
   onLog: (agent: Agent, message: string, type?: 'info' | 'warning' | 'error') => void;
-  onPlanUpdate: (plan: PlanStep[]) => void;
+  onPlanUpdate?: (plan: PlanStep[]) => void; // Optional plan update callback
   onScratchpadUpdate: (scratchpad: string) => string; // Returns the current scratchpad
   onStepUpdate: (stepIndex: number) => void;
   onFinalArtifact: (artifacts: Artifact[]) => void;
+  onCost?: (cost: number, label: string) => void; // Optional cost tracking callback
+}
+
+export interface CostBreakdown {
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  inputUSD: number;
+  outputUSD: number;
+  totalUSD: number;
+  modality: string;
+  at: string;
+  stepId?: string;
+  timestamp?: number;
 }
 
 export interface TestResult {

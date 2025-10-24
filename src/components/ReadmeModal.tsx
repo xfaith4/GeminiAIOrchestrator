@@ -20,11 +20,11 @@ const ReadmeModal: React.FC<ReadmeModalProps> = ({ onClose }) => {
   }, [onClose]);
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-base-200 border border-base-300 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -33,7 +33,7 @@ const ReadmeModal: React.FC<ReadmeModalProps> = ({ onClose }) => {
             <InformationCircleIcon className="w-7 h-7 text-brand-secondary" />
             <h2 className="text-xl font-bold text-white">Read Me: Agentic Workflow Orchestrator</h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-1 rounded-full text-content-200 hover:bg-base-300 hover:text-white transition-colors"
             aria-label="Close Read Me"
@@ -41,7 +41,7 @@ const ReadmeModal: React.FC<ReadmeModalProps> = ({ onClose }) => {
             <XMarkIcon className="w-6 h-6" />
           </button>
         </header>
-        
+
         <main className="p-6 overflow-y-auto text-content-100 space-y-6">
           <div>
             <h3 className="text-lg font-semibold text-brand-secondary mb-2">Capabilities</h3>
@@ -50,7 +50,7 @@ const ReadmeModal: React.FC<ReadmeModalProps> = ({ onClose }) => {
                 <strong className="text-white">Goal-Oriented Planning:</strong> You provide a high-level goal, and a Supervisor agent breaks it down into a logical, step-by-step plan.
               </li>
               <li>
-                <strong className="text-white">File-based Context:</strong> Upload documents (`.docx`), spreadsheets (`.xlsx`, `.csv`), data files (`.json`), and PowerShell scripts (`.ps1`, `.psm1`, `.psd1`) to provide rich context for your goal.
+                <strong className="text-white">File-based Context:</strong> Upload documents (`.docx`), spreadsheets (`.xlsx`, `.csv`), data files (`.json`), database files (`.sql`, `.sqlite`, `.db`), and PowerShell scripts (`.ps1`, `.psm1`, `.psd1`) to provide rich context for your goal.
               </li>
               <li>
                 <strong className="text-white">Specialized Agents & Tool Use:</strong> The plan is executed by a team of specialized agents. Some agents think (e.g., Report Writer), while others act by using tools (e.g., the `GitHub Tool User` can read from public repositories).

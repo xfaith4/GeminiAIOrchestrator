@@ -1,158 +1,195 @@
-// ### BEGIN FILE: src/geminiService.ts
-// Browser-safe env access via Vite:
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-const API_VERSION = (import.meta.env.VITE_GEMINI_API_VERSION as string) ?? 'v1';
-const MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) ?? 'gemini-1.5-flash';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_VERSION = import.meta.env.VITE_GEMINI_API_VERSION || "v1";
+const DEFAULT_MODEL = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
 
-function requireKey() {
-  if (!API_KEY) throw new Error("Missing VITE_GEMINI_API_KEY in .env.local");
-}
+import { estimateUSD, pickModalityFromParts } from "./cost";
+import type { CostBreakdown, PlanStep } from "./types";
 
-// --- Types (match your app's expectations) ---
-export type PlanStep = {
-  step: number;
-  task: string;
-  agent: string;                // e.g., "Supervisor"
-  tool?: string | undefined;    // e.g., "github:getRepoTree"
-  toolInput?: any;
+type Candidate = { content?: { parts?: Array<{ text?: string }>} };
+type Usage = { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+
+export type GeminiCallResult = {
+  text: string;
+  usage?: { promptTokens:number; outputTokens:number; totalTokens:number };
+  cost?: CostBreakdown;
 };
 
-// Util: basic POST to Gemini GenerateContent endpoint
-async function geminiGenerate(textPrompt: string) {
-  requireKey();
-  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${encodeURIComponent(MODEL)}:generateContent?key=${API_KEY}`;
+function errWrap(resp: Response, body: any) {
+  const status = resp.status;
+  const msg = typeof body === "string" ? body : JSON.stringify(body);
+  throw new Error(`Gemini HTTP ${status}: ${msg}`);
+}
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: textPrompt }] }],
-      generationConfig: { temperature: 0.3 },
-    }),
+async function listModels(): Promise<string[]> {
+  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models?key=${API_KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) errWrap(r, await r.text());
+  const j = await r.json();
+  return (j?.models ?? [])
+    .map((m: any) => String(m?.name ?? "").replace(/^models\//, ""))
+    .filter(Boolean);
+}
+
+async function callModel(
+  model: string,
+  contents: any
+): Promise<{ data:any; effectiveModel:string }> {
+  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${API_KEY}`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ contents }),
   });
+  if (r.status === 404) {
+    console.warn(`[Gemini] ${model} 404. Listing models and retrying with a supported one...`);
+    const names = await listModels();
+    const prefer = ["gemini-2.5-flash","gemini-2.5-pro","gemini-2.0-flash","gemini-2.0-flash-lite"];
+    const fallback = prefer.find(p => names.includes(p)) ?? names[0];
+    if (!fallback) errWrap(r, await r.text());
 
- if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Gemini HTTP ${resp.status}: ${body}`);
+    const r2 = await fetch(
+      `https://generativelanguage.googleapis.com/${API_VERSION}/models/${fallback}:generateContent?key=${API_KEY}`,
+      { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify({ contents }) }
+    );
+    if (!r2.ok) errWrap(r2, await r2.text());
+    return { data: await r2.json(), effectiveModel: fallback };
   }
-
-  const data = await resp.json();
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join('') ??
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  return String(text || '').trim();
+  if (!r.ok) errWrap(r, await r.text());
+  return { data: await r.json(), effectiveModel: model };
 }
 
-// Parse a numbered plan from a freeform LLM response into PlanStep[] (very tolerant)
-function parsePlanTextToSteps(planText: string): PlanStep[] {
-  // Expect lines like: "1. Do X (Agent: Supervisor)" but accept loose text
-  const lines = planText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const steps: PlanStep[] = [];
+function extractText(data:any): string {
+  const cands: Candidate[] = data?.candidates ?? [];
+  const parts = cands[0]?.content?.parts ?? [];
+  return parts.map(p => p?.text ?? "").join("").trim();
+}
 
-  let n = 1;
-  for (const line of lines) {
-    // Try "1. Task (Agent: Name)" first
-    const m = line.match(/^\s*(\d+)[\.\)]\s+(.*?)(?:\s*\(Agent:\s*([^)]+)\))?\s*$/i);
-    if (m) {
-      const stepNum = Number(m[1]);
-      const task = m[2].trim();
-      const agent = (m[3]?.trim() || 'Supervisor');
-      steps.push({ step: stepNum, task, agent });
-      n = Math.max(n, stepNum + 1);
-      continue;
+function toCost(model:string, usage:Usage, modality:"text"|"image"|"audio"|"video"="text"): {usageOut: GeminiCallResult["usage"], cost: CostBreakdown} {
+  const promptTokens = usage?.promptTokenCount ?? 0;
+  const outputTokens = usage?.candidatesTokenCount ?? 0;
+  const totalTokens = usage?.totalTokenCount ?? (promptTokens + outputTokens);
+  const { inputUSD, outputUSD, totalUSD } = estimateUSD(model, promptTokens, outputTokens, modality);
+  return {
+    usageOut: { promptTokens, outputTokens, totalTokens },
+    cost: {
+      model, promptTokens, outputTokens, totalTokens,
+      inputUSD, outputUSD, totalUSD, modality,
+      at: new Date().toISOString(),
     }
+  };
+}
 
-    // Fallback: treat any non-empty line as next step
-    steps.push({
-      step: n++,
-      task: line,
-      agent: 'Supervisor',
-    });
+/* ============================
+ * Public API (back-compatible)
+ * ============================ */
+
+export async function createPlan(context: string): Promise<{ plan: PlanStep[]; cost?: CostBreakdown }> {
+  const { plan, cost } = await createPlanWithMeta(context);
+  return { plan, cost };
+}
+
+export async function createPlanWithMeta(context: string): Promise<{ plan: any[]; usage?: GeminiCallResult["usage"]; cost?: CostBreakdown }> {
+  const prompt = [
+    { role: "user", parts: [{ text: `Create a concise 3–6 step plan for:\n${context}\n` }] }
+  ];
+  const { data, effectiveModel } = await callModel(DEFAULT_MODEL, prompt);
+  const text = extractText(data);
+
+  // Parse tolerant JSON list; allow bullet/numbered fallback
+  let plan: any[] = [];
+  try {
+    plan = JSON.parse(text);
+    if (!Array.isArray(plan)) throw new Error("not array");
+  } catch {
+    plan = String(text).split(/\n+/).map((line, i) => ({ step: i + 1, task: line, agent: "Supervisor", dependencies: [] }));
   }
 
-  // Last fallback if model returned nothing useful
-  if (steps.length === 0) {
-    steps.push({
-      step: 1,
-      task: 'Draft a short plan overview based on the goal and any provided file.',
-      agent: 'Supervisor',
-    });
-  }
-  return steps;
+  const usage: Usage = data?.usageMetadata ?? {};
+  const { usageOut, cost } = toCost(effectiveModel, usage, "text");
+  return { plan, usage: usageOut, cost };
 }
 
-// Public API consumed by App.tsx and runOrchestrationLogic:
+export async function executeStep(step: any, scratchpad: string, retryReasoning = ""): Promise<{ output:string; usage?: GeminiCallResult["usage"]; cost?: CostBreakdown }> {
+  const parts = [
+    { text: `You are ${step.agent}. Execute the task:\n${step.task}\n\nContext:\n${scratchpad}\n${retryReasoning ? `\nReviewer feedback:\n${retryReasoning}\n` : ""}` }
+  ].map(t => ({ text: (t as any).text }));
 
-// 1) Create a multi-step plan from context (goal + optional file content)
-export async function createPlan(context: string): Promise<PlanStep[]> {
-  const prompt =
-    `You are a Supervisor agent. Create a clear, numbered plan (3–6 steps). ` +
-    `Each line should be "N. Task (Agent: <one of Supervisor, Web Researcher, Data Analyst, Reviewer, Synthesizer>)".\n\n` +
-    `${context}`;
+  const contents = [{ role:"user", parts }];
+  const { data, effectiveModel } = await callModel(DEFAULT_MODEL, contents);
+  const text = extractText(data);
 
-  const raw = await geminiGenerate(prompt);
-  return parsePlanTextToSteps(raw);
+  const usage: Usage = data?.usageMetadata ?? {};
+  const { usageOut, cost } = toCost(effectiveModel, usage, pickModalityFromParts(parts));
+  return { output: text, usage: usageOut, cost };
 }
 
-// 2) Execute a step against the current scratchpad.
-// Return an object with an `output` string (your app logs it and decides approve/retry via reviewStep).
-export async function executeStep(
-  step: PlanStep,
-  scratchpad: string,
-  retryReasoning: string | undefined
-): Promise<{ output: string }> {
-  const prompt =
-    `You are the "${step.agent}" executing Step ${step.step}: "${step.task}".\n` +
-    (retryReasoning ? `A prior attempt failed. Fix it. Reason: ${retryReasoning}\n` : '') +
-    `Use the SCRATCHPAD for context and produce the best possible result.\n\n` +
-    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
+export async function reviewStep(step:any, stepOutput:string, scratchpad:string): Promise<{ decision:"APPROVE"|"REVISE"; reasoning:string; usage?: GeminiCallResult["usage"]; cost?: CostBreakdown }> {
+  const prompt = [
+    { role:"user", parts:[{ text:
+`You are a strict reviewer. Consider the step and its output.
 
-  const output = await geminiGenerate(prompt);
-  return { output };
-}
+Step: ${step.step} - ${step.task} (Agent: ${step.agent})
+Output:
+${stepOutput}
 
-// 3) Review a step output and decide APPROVE or REVISE with reasoning
-export async function reviewStep(
-  step: PlanStep,
-  stepOutput: string,
-  scratchpad: string
-): Promise<{ decision: 'APPROVE' | 'REVISE'; reasoning: string }> {
-  const prompt =
-    `You are a strict Reviewer. Evaluate the output for Step ${step.step} ("${step.task}"). ` +
-    `Return ONLY one of the words APPROVE or REVISE on the first line, then a one-sentence reason on the next line.\n\n` +
-    `--- OUTPUT ---\n${stepOutput}\n--- END OUTPUT ---\n\n` +
-    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
+Context:
+${scratchpad}
 
-  const raw = await geminiGenerate(prompt);
-  const [first, ...rest] = raw.split(/\r?\n/);
-  const decision = /^approve/i.test(first ?? '') ? 'APPROVE' : 'REVISE';
-  const reasoning = (rest.join(' ').trim() || 'No reasoning provided.').slice(0, 500);
-  return { decision, reasoning };
-}
+Respond ONLY as JSON:
+{"decision":"APPROVE"|"REVISE","reasoning":"<short>"}`
+    }]}
+  ];
+  const { data, effectiveModel } = await callModel(DEFAULT_MODEL, prompt);
+  const text = extractText(data);
 
-// 4) Synthesize final artifacts from the scratchpad
-export async function synthesizeFinalArtifact(
-  scratchpad: string
-): Promise<Array<{ filename: string; content: string }>> {
-  const prompt =
-    `Create final useful artifacts from the SCRATCHPAD. If code is relevant, return a short README and one code file. ` +
-    `Return the result as two blocks:\n` +
-    `--- FILENAME: <name> ---\n<content>\n--- END FILE ---\n(repeat for any additional files)\n\n` +
-    `--- SCRATCHPAD ---\n${scratchpad}\n--- END SCRATCHPAD ---`;
-
-  const raw = await geminiGenerate(prompt);
-
-  // Very lenient block parser
-  const files: Array<{ filename: string; content: string }> = [];
-  const regex = /---\s*FILENAME:\s*([^\n]+)\s*---\s*([\s\S]*?)---\s*END FILE\s*---/gi;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(raw)) !== null) {
-    files.push({ filename: m[1].trim(), content: m[2].trim() });
+  let decision:"APPROVE"|"REVISE" = "APPROVE";
+  let reasoning = "Looks good.";
+  try {
+    const j = JSON.parse(text);
+    decision = (j.decision === "REVISE") ? "REVISE" : "APPROVE";
+    reasoning = String(j.reasoning ?? reasoning);
+  } catch {
+    // fall through with defaults
   }
 
-  if (files.length === 0) {
-    files.push({ filename: 'README.txt', content: raw || 'No artifacts produced.' });
-  }
-  return files;
+  const usage: Usage = data?.usageMetadata ?? {};
+  const { usageOut, cost } = toCost(effectiveModel, usage, "text");
+  return { decision, reasoning, usage: usageOut, cost };
 }
-// ### END FILE: src/geminiService.ts
+
+export async function synthesizeFinalArtifactWithMeta(scratchpad: string): Promise<{ artifacts: Array<{name:string; content:string}>; usage?: GeminiCallResult["usage"]; cost?: CostBreakdown }> {
+  const prompt = [
+    { role:"user", parts:[{ text:
+`Synthesize a final workspace from this scratchpad.
+Return JSON array of files: [{"name":"README.md","content":"..."}]
+
+Scratchpad:
+${scratchpad}`
+    }]}
+  ];
+  const { data, effectiveModel } = await callModel(DEFAULT_MODEL, prompt);
+  const text = extractText(data);
+
+  let files: Array<{name:string; content:string}> = [];
+  try {
+    const arr = JSON.parse(text);
+    if (Array.isArray(arr)) {
+      files = arr.map((x:any) => ({ name: String(x?.name ?? "artifact.txt"), content: String(x?.content ?? "") }));
+    } else {
+      files = [{ name:"artifact.txt", content:text }];
+    }
+  } catch {
+    files = [{ name:"artifact.txt", content:text }];
+  }
+
+  const usage: Usage = data?.usageMetadata ?? {};
+  const { usageOut, cost } = toCost(effectiveModel, usage, "text");
+  return { artifacts: files, usage: usageOut, cost };
+}
+
+// Back-compat wrapper (old signature)
+export async function synthesizeFinalArtifact(scratchpad: string) {
+  const { artifacts } = await synthesizeFinalArtifactWithMeta(scratchpad);
+  return artifacts;
+}
