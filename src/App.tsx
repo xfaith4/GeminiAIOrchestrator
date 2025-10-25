@@ -224,12 +224,12 @@ const runOrchestrationLogic = async ({
 
   onStepUpdate(-1);
   onLog('Orchestrator', 'All steps completed. Synthesizing final artifact workspace...');
-const synth = await services.gemini.synthesizeFinalArtifactWithMeta(currentScratchpad);
-const artifacts = synth.artifacts.map((f: any) => toTypesArtifact(f));
-if (synth.cost && onCost) onCost(synth.cost.totalUSD, "synthesize");
-onFinalArtifact(artifacts);
-onLog('Synthesizer', `Final workspace created with ${artifacts.length} file(s).`);
-return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts };
+const synth = await services.gemini.synthesizeFinalArtifactWithMeta(currentScratchpad) ;
+const artifacts = synth.artifacts.map((f: any) => toTypesArtifact(f)) ;
+if (synth.cost && onCost) onCost(synth.cost.totalUSD, "synthesize") ;
+onFinalArtifact(artifacts) ;
+onLog('Synthesizer', `Final workspace created with ${artifacts.length} file(s).`) ;
+return { finalScratchpad: currentScratchpad, finalArtifacts: artifacts } ;
 
 };
 
@@ -362,13 +362,13 @@ function App() {
       }
       addLogEntry('User', context);
       addLogEntry('Orchestrator', 'Requesting plan from Supervisor...');
-    const planResp = await geminiService.createPlanWithMeta(context);
-const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i));
-if (planResp.cost && newSessionId) {
-  const cost = planResp.cost.totalUSD;
-  appendRun(newSessionId, { totalUSD: cost, stepId: "plan" });
-  setSessionCostUSD(prev => prev + cost);
-}
+      const planResp = await geminiService.createPlanWithMeta(context) ;
+      const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i)) ;
+      if (planResp.cost && newSessionId) {
+        const cost = planResp.cost.totalUSD;
+        appendRun(newSessionId, { totalUSD: cost, stepId: "plan" });
+        setSessionCostUSD(prev => prev + cost);
+      }
 
       setPlan(createdPlan);
       addLogEntry('Supervisor', `Created a ${createdPlan.length}-step plan. Awaiting user approval.`);
@@ -455,7 +455,6 @@ if (planResp.cost && newSessionId) {
       const planResp = await geminiService.createPlanWithMeta(context);
       const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i));
       if (planResp.cost) {
-        const cost = planResp.cost.totalUSD;
         // Note: Not adding to session cost for tests
       }
 
