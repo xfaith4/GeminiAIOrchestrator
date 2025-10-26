@@ -14,7 +14,6 @@ interface ArtifactWorkspaceProps {
   scratchpad: string;
   finalArtifacts: Artifact[] | null;
   isLoading: boolean;
-  goal: string;
 }
 
 const getFileIcon = (lang: string) => {
@@ -23,11 +22,14 @@ const getFileIcon = (lang: string) => {
         case 'python': return '🐍';
         case 'javascript': return '📜';
         case 'json': return '{}';
+        case 'sql': return '🗄️';
+        case 'image': return '🖼️';
+        case 'video': return '🎬';
         default: return '📄';
     }
 }
 
-const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading, goal }) => {
+const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading }) => {
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
 
   // FIX: Added useEffect to handle side effects, such as updating the selected artifact when finalArtifacts change.
@@ -42,6 +44,11 @@ const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, final
   const renderedContent = useMemo(() => {
     if (!selectedArtifact) return '';
     const { content, language } = selectedArtifact;
+
+    // Images and videos are handled separately in JSX, return content as-is
+    if (language === 'image' || language === 'video') {
+        return content;
+    }
 
     if (language === 'markdown') {
         try {
@@ -63,7 +70,30 @@ const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, final
   }, [selectedArtifact]);
 
   const handleDownload = (artifact: Artifact) => {
-    const blob = new Blob([artifact.content], { type: 'text/plain;charset=utf-8' });
+    let blob: Blob;
+    
+    // Handle binary content (images/videos stored as base64)
+    if (artifact.language === 'image' || artifact.language === 'video') {
+      // If content is a data URL, fetch it and create blob
+      if (artifact.content.startsWith('data:')) {
+        fetch(artifact.content)
+          .then(res => res.blob())
+          .then(fetchedBlob => {
+            const url = URL.createObjectURL(fetchedBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = artifact.name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          });
+        return;
+      }
+    }
+    
+    // Handle text content
+    blob = new Blob([artifact.content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -133,7 +163,25 @@ const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, final
                             .token.regex, .token.important, .token.variable { color: #e5c07b; }
                             `}
                         </style>
-                         {selectedArtifact?.language === 'markdown' ? (
+                         {selectedArtifact?.language === 'image' ? (
+                             <div className="flex items-center justify-center">
+                                 <img 
+                                     src={renderedContent} 
+                                     alt={selectedArtifact.name}
+                                     className="max-w-full max-h-[600px] object-contain rounded-md"
+                                 />
+                             </div>
+                         ) : selectedArtifact?.language === 'video' ? (
+                             <div className="flex items-center justify-center">
+                                 <video 
+                                     src={renderedContent}
+                                     controls
+                                     className="max-w-full max-h-[600px] rounded-md"
+                                 >
+                                     Your browser does not support the video tag.
+                                 </video>
+                             </div>
+                         ) : selectedArtifact?.language === 'markdown' ? (
                              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderedContent }}/>
                          ) : (
                              <pre className={`language-${selectedArtifact?.language}`}><code dangerouslySetInnerHTML={{ __html: renderedContent }}/></pre>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BeakerIcon, XMarkIcon } from './icons';
-import { AGENT_DETAILS } from '../constants';
+import { AGENT_DETAILS } from '../../constants';
 import { Agent } from '../types';
 
 interface AgentLibraryModalProps {
