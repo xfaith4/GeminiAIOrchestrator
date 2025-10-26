@@ -167,8 +167,3 @@ function runAllTests() {
 
 // Export for use in other files
 export { testPlanAgentAssignment, testNoSupervisorWork, testArtifactDiversity, runAllTests };
-
-// Run tests if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runAllTests();
-}
