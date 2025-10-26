@@ -46,7 +46,7 @@ const GoalInput: React.FC<GoalInputProps> = ({
     try {
       let content = '';
       const extension = file.name.split('.').pop()?.toLowerCase() || '';
-      const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1', 'py', 'js', 'ts', 'md', 'txt', 'sql', 'sqlite', 'db'];
+      const textExtensions = ['csv', 'json', 'ps1', 'psm1', 'psd1', 'py', 'js', 'ts', 'md', 'txt', 'sql'];
       const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'];
       const videoExtensions = ['mp4', 'webm', 'avi', 'mov', 'mkv', 'flv'];
 
@@ -134,7 +134,7 @@ const GoalInput: React.FC<GoalInputProps> = ({
               type="file"
               className="hidden"
               multiple
-              accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt,.sql,.sqlite,.db"
+              accept=".docx,.xlsx,.csv,.json,.ps1,.psm1,.psd1,.py,.js,.ts,.md,.txt,.sql,.jpg,.jpeg,.png,.gif,.webp,.svg,.bmp,.ico,.mp4,.webm,.avi,.mov,.mkv,.flv"
               aria-label="Attachments"
               onChange={handleFileChange}
               disabled={isDisabled}

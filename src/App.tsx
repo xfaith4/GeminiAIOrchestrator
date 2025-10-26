@@ -63,9 +63,7 @@ function guessLanguageByFilename(name: string): Lang {
     case 'js':
     case 'jsx': return 'javascript';
     case 'py':  return 'python';
-    case 'sql':
-    case 'sqlite':
-    case 'db': return 'sql';
+    case 'sql': return 'sql';
     case 'jpg':
     case 'jpeg':
     case 'png':
