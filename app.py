@@ -1,10 +1,14 @@
 import streamlit as st
 import json
 import os
+import time
+
+# --- Constants ---
+ORCHESTRATIONS_FILE = "orchestrations.json"
+SIMULATION_DELAY_SECONDS = 1  # Delay for simulated API calls
 
 # --- Helper functions for managing orchestrations.json ---
 # These are included in app.py for self-containment, consistent with the original repo's structure.
-ORCHESTRATIONS_FILE = "orchestrations.json"
 
 def load_orchestrations(file_path=ORCHESTRATIONS_FILE):
     """Loads orchestrations from a JSON file."""
@@ -62,8 +66,7 @@ def orchestrate(orchestration_data):
             # -------------------------------------------------------------------
 
             # Simulate Gemini response for demonstration purposes
-            import time
-            time.sleep(1) # Simulate API call delay
+            time.sleep(SIMULATION_DELAY_SECONDS)  # Simulate API call delay
             task_output = f"Simulated output for prompt: '{prompt[:50]}...' (Model: {model_name})"
             final_output[task_id] = {"output": task_output}
             st.session_state.orchestration_log += f"Task {task_id} completed. Output: {task_output[:70]}...\n"
