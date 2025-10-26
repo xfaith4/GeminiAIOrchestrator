@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Sun,
   Moon,
+  FileText,
 } from 'lucide-react';
 
 /* ---------------- Core header icons ---------------- */
@@ -69,3 +70,6 @@ export const ReplayIcon = (props: React.SVGProps<SVGSVGElement>) => <RotateCcw {
 /* Theme toggle */
 export const SunIcon = (props: React.SVGProps<SVGSVGElement>) => <Sun {...props} />;
 export const MoonIcon = (props: React.SVGProps<SVGSVGElement>) => <Moon {...props} />;
+
+/* Log viewer */
+export const LogViewerIcon = (props: React.SVGProps<SVGSVGElement>) => <FileText {...props} />;

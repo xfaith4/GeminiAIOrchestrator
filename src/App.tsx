@@ -7,6 +7,7 @@ import ArtifactWorkspace from './components/ScratchpadDisplay';
 import SessionHistory from './components/SessionHistory';
 import ReadmeModal from './components/ReadmeModal';
 import AgentLibraryModal from './components/AgentLibraryModal';
+import LogViewerModal from './components/LogViewerModal';
 import OrchestratorTestRunner from './components/OrchestratorTestRunner';
 import { InformationCircleIcon, OrchestratorIcon, BeakerIcon, SunIcon, MoonIcon } from './components/icons';
 import { appendRun } from './storage/costLedger';
@@ -245,6 +246,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isReadmeVisible, setIsReadmeVisible] = useState(false);
   const [isAgentLibraryVisible, setIsAgentLibraryVisible] = useState(false);
+  const [isLogViewerVisible, setIsLogViewerVisible] = useState(false);
   const [testResults, setTestResults] = useState<TestResult | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -325,6 +327,7 @@ function App() {
     setLogEntries(session.logEntries.map((l) => ({ ...l, timestamp: new Date(l.timestamp) })));
     setScratchpad(session.scratchpad);
     setFinalArtifacts(session.artifacts);
+    setSessionCostUSD(session.cost || 0);
     setPlanState('finished');
     setCurrentStepIndex(session.error || session.artifacts ? -1 : (session.plan?.length || 0) - 1);
   };
@@ -338,6 +341,10 @@ function App() {
   };
 
   const handleThemeToggle = () => setIsDarkMode(!isDarkMode);
+
+  const handleViewLogs = () => {
+    setIsLogViewerVisible(true);
+  };
 
   const handleStartPlanGeneration = async (userGoal: string) => {
     resetState();
@@ -382,6 +389,7 @@ function App() {
         scratchpad: '',
         artifacts: null,
         error: error.message,
+        cost: 0,
       });
     }
   };
@@ -428,6 +436,7 @@ function App() {
         scratchpad: finalScratchpad,
         artifacts: finalArtifacts,
         error: null,
+        cost: sessionCostUSD,
       });
     } catch (error: any) {
       addLogEntry('Orchestrator', `An unexpected error occurred: ${error.message}`, 'error');
@@ -440,6 +449,7 @@ function App() {
         scratchpad: currentScratchpad,
         artifacts: null,
         error: error.message,
+        cost: sessionCostUSD,
       });
     }
   };
@@ -566,6 +576,7 @@ function App() {
               scratchpad={scratchpad}
               finalArtifacts={finalArtifacts}
               isLoading={planState === 'executing' && plan.length > 0 && currentStepIndex === -1}
+              onViewLogs={handleViewLogs}
             />
           </div>
           <OrchestratorTestRunner onRunTest={handleRunTestSuite} results={testResults} />
@@ -574,6 +585,13 @@ function App() {
 
       {isReadmeVisible && <ReadmeModal onClose={() => setIsReadmeVisible(false)} />}
       {isAgentLibraryVisible && <AgentLibraryModal onClose={() => setIsAgentLibraryVisible(false)} />}
+      {isLogViewerVisible && (
+        <LogViewerModal
+          session={sessions.find(s => s.id === activeSessionId) || null}
+          isOpen={isLogViewerVisible}
+          onClose={() => setIsLogViewerVisible(false)}
+        />
+      )}
     </div>
   );
 }

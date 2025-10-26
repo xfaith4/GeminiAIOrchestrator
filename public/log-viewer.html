@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Orchestrator Log Viewer</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #111827;
+    --muted: #94a3b8;
+    --text: #e5e7eb;
+    --accent: #60a5fa;
+    --card: #0b1220;
+    --border: #1f2937;
+  }
+  *{box-sizing:border-box}
+  body{font:14px/1.55 system-ui,Segoe UI,Roboto,Inter,Arial;margin:0;background:var(--bg);color:var(--text)}
+  header{
+    display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;
+    padding:18px 20px;border-bottom:1px solid var(--border);background:#0d1426;position:sticky;top:0;z-index:5
+  }
+  h1{margin:0;font-size:18px}
+  .muted{color:var(--muted);font-size:.9rem}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  input[type="text"],input[type="file"],button{
+    background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 11px;font-size:14px
+  }
+  button{cursor:pointer}
+  .primary{background:var(--accent);color:#0b1220;border:none}
+  main{padding:20px;display:grid;gap:16px;grid-template-columns:1fr 350px}
+  @media (max-width:1100px){ main{grid-template-columns:1fr} }
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .section h2{margin:0 0 8px 0;font-size:16px}
+  .summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;color:var(--muted)}
+  .cards{grid-column:1/-1}
+  .canon-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin:10px 0}
+  .canon-card .path{color:var(--muted);font-size:.85rem;margin-bottom:6px}
+  .grid{display:grid;gap:16px}
+  pre.raw{white-space:pre-wrap;background:#0a0f1a;border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto}
+  code.inline{background:#0a0f1a;border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+  .row-actions{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px}
+  .highlight{outline:2px solid var(--accent);border-radius:8px}
+  details{border:1px solid var(--border);border-radius:12px;background:var(--card)}
+  summary{padding:14px;cursor:pointer;font-weight:500;background:var(--panel);border-radius:12px 12px 0 0;border-bottom:1px solid var(--border)}
+  details[open] summary{border-radius:12px 12px 0 0}
+  details:not([open]) summary{border-radius:12px}
+  .collapsible-content{padding:14px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Orchestrator Log Viewer</h1>
+    <div class="muted">View detailed orchestration logs, plan steps, and artifacts from your GeminiAI session.</div>
+  </div>
+  <div class="bar">
+    <input id="search" type="text" placeholder="Search logs, steps, or artifacts…">
+    <button id="expandAll">Expand all</button>
+    <button id="collapseAll">Collapse all</button>
+    <button id="copyData" class="primary">Copy Data</button>
+  </div>
+</header>
+
+<main>
+  <section class="card section">
+    <h2>Session Overview</h2>
+    <div class="summary" id="overview"></div>
+    <div class="muted" id="stats"></div>
+  </section>
+
+  <section class="card section">
+    <details>
+      <summary>Orchestration Data (JSON)</summary>
+      <div class="collapsible-content">
+        <div class="row-actions">
+          <button id="copyJson">Copy JSON</button>
+          <button id="downloadJson">Download JSON</button>
+        </div>
+        <pre class="raw" id="raw"></pre>
+      </div>
+    </details>
+  </section>
+
+  <section class="card section">
+    <details>
+      <summary>Execution Logs</summary>
+      <div class="collapsible-content">
+        <div id="logs"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card section">
+    <details>
+      <summary>Plan Steps</summary>
+      <div class="collapsible-content">
+        <div id="plan"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card section">
+    <details>
+      <summary>Final Artifacts</summary>
+      <div class="collapsible-content">
+        <div id="artifacts"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card section cards">
+    <h2>Scratchpad Content</h2>
+    <div class="canon-card">
+      <div class="path">Execution Trace</div>
+      <div id="scratchpad"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  const els = {
+    overview: document.getElementById('overview'),
+    stats: document.getElementById('stats'),
+    raw: document.getElementById('raw'),
+    logs: document.getElementById('logs'),
+    plan: document.getElementById('plan'),
+    artifacts: document.getElementById('artifacts'),
+    scratchpad: document.getElementById('scratchpad'),
+    search: document.getElementById('search'),
+    copyData: document.getElementById('copyData'),
+    copyJson: document.getElementById('copyJson'),
+    downloadJson: document.getElementById('downloadJson'),
+    expandAll: document.getElementById('expandAll'),
+    collapseAll: document.getElementById('collapseAll'),
+  };
+  let currentData = null;
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  // ---------- Rendering helpers (same rules as our canonicalizer) ----------
+  function renderMessage(msg){
+    if (msg === null || msg === undefined){ return ''; }
+    if (typeof msg !== 'string'){
+      return '<pre>'+ escapeHtml(JSON.stringify(msg, null, 2)) +'</pre>';
+    }
+    let s = msg
+      .replaceAll('\\\\r\\\\n','\n')
+      .replaceAll('\\\\r','\n')
+      .replaceAll('\\\\n','\n')
+      .replaceAll('\\\\t','\\t');
+    const blocks = s.split(/\\n{2,}/);
+    return blocks.map(renderBlock).join('');
+  }
+  function renderBlock(blockText){
+    const ulItem = /^(\\*|-|•)\\s+(.*)$/;
+    const olItem = /^(\\d+)[\\.\\)]\\s+(.*)$/;
+    const lines = blockText.split('\\n');
+    const trimmed = lines.filter(l => l.trim() !== '').map(l => l.trim());
+    if (trimmed.length && trimmed.every(l => ulItem.test(l))){
+      const items = trimmed.map(l => {
+        const m = l.match(ulItem); const body = m? m[2] : l;
+        return '<li>'+ inlineFormat(body) +'</li>';
+      }).join('');
+      return '<ul>'+items+'</ul>';
+    }
+    if (trimmed.length && trimmed.every(l => olItem.test(l))){
+      const first = trimmed[0].match(olItem);
+      const start = first ? parseInt(first[1],10) : 1;
+      const items = trimmed.map(l => {
+        const m = l.match(olItem); const body = m? m[2] : l;
+        return '<li>'+ inlineFormat(body) +'</li>';
+      }).join('');
+      return '<ol'+(start!==1?(' start="'+start+'"'):'')+'>'+items+'</ol>';
+    }
+    let esc = escapeHtml(blockText).replaceAll('\\n','<br>');
+    esc = esc.replace(/`([^`]+)`/g, '<code class="inline">$1</code>')
+             .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+             .replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+    return '<p>'+esc+'</p>';
+  }
+  function inlineFormat(plain){
+    let esc = escapeHtml(plain);
+    esc = esc.replace(/`([^`]+)`/g, '<code class="inline">$1</code>')
+             .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+             .replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+    return esc;
+  }
+
+  // ---------- Build sections from orchestration data ----------
+  function buildOverview(data){
+    const pills = [];
+    if (data.id) pills.push('<span class="pill">Session: '+escapeHtml(String(data.id))+'</span>');
+    if (data.goal) pills.push('<span class="pill">Goal: '+escapeHtml(data.goal.substring(0,50))+(data.goal.length>50?'...':'')+'</span>');
+    if (data.plan && data.plan.length) pills.push('<span class="pill">Plan: '+data.plan.length+' steps</span>');
+    if (data.logEntries && data.logEntries.length) pills.push('<span class="pill">Logs: '+data.logEntries.length+' entries</span>');
+    if (data.artifacts && data.artifacts.length) pills.push('<span class="pill">Artifacts: '+data.artifacts.length+' files</span>');
+    if (data.cost) pills.push('<span class="pill">Cost: $'+escapeHtml(String(data.cost))+'</span>');
+    els.overview.innerHTML = pills.join(' ') || '<span class="muted">No session data</span>';
+  }
+
+  function buildLogs(data){
+    if (!data.logEntries || !data.logEntries.length) {
+      els.logs.innerHTML = '<div class="muted">No logs available.</div>';
+      return;
+    }
+
+    const logsHtml = data.logEntries.map(entry => {
+      const time = new Date(entry.timestamp).toLocaleTimeString();
+      const agent = escapeHtml(entry.agent);
+      const message = renderMessage(entry.message);
+      const type = entry.type || 'info';
+      const typeClass = type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+
+      return `
+        <div class="canon-card">
+          <div class="path">${time} - ${agent} (${type})</div>
+          <div>${message}</div>
+        </div>
+      `;
+    }).join('');
+
+    els.logs.innerHTML = logsHtml;
+  }
+
+  function buildPlan(data){
+    if (!data.plan || !data.plan.length) {
+      els.plan.innerHTML = '<div class="muted">No plan available.</div>';
+      return;
+    }
+
+    const planHtml = data.plan.map((step, idx) => {
+      const stepNum = step.step || (idx + 1);
+      const agent = escapeHtml(step.agent || 'Unknown');
+      const task = renderMessage(step.task || '');
+      const tool = step.tool ? `<br><small>Tool: ${escapeHtml(step.tool)}</small>` : '';
+
+      return `
+        <div class="canon-card">
+          <div class="path">Step ${stepNum} - ${agent}</div>
+          <div>${task}${tool}</div>
+        </div>
+      `;
+    }).join('');
+
+    els.plan.innerHTML = planHtml;
+  }
+
+  function buildArtifacts(data){
+    if (!data.artifacts || !data.artifacts.length) {
+      els.artifacts.innerHTML = '<div class="muted">No artifacts available.</div>';
+      return;
+    }
+
+    const artifactsHtml = data.artifacts.map(artifact => {
+      const name = escapeHtml(artifact.name || 'unnamed');
+      const language = escapeHtml(artifact.language || 'text');
+      const content = artifact.language === 'markdown' ?
+        renderMessage(artifact.content || '') :
+        `<pre><code>${escapeHtml(artifact.content || '')}</code></pre>`;
+
+      return `
+        <div class="canon-card">
+          <div class="path">${name} (${language})</div>
+          <div>${content}</div>
+        </div>
+      `;
+    }).join('');
+
+    els.artifacts.innerHTML = artifactsHtml;
+  }
+
+  function buildScratchpad(data){
+    if (!data.scratchpad) {
+      els.scratchpad.innerHTML = '<div class="muted">No scratchpad content available.</div>';
+      return;
+    }
+
+    const formatted = renderMessage(data.scratchpad);
+    els.scratchpad.innerHTML = formatted;
+  }
+
+  function setRaw(data){
+    els.raw.textContent = JSON.stringify(data, null, 2);
+  }
+
+  function renderAll(data){
+    currentData = data;
+    buildOverview(data);
+    buildLogs(data);
+    buildPlan(data);
+    buildArtifacts(data);
+    buildScratchpad(data);
+    setRaw(data);
+
+    // Update stats
+    const stats = [];
+    if (data.logEntries) stats.push(`Logs: ${data.logEntries.length}`);
+    if (data.plan) stats.push(`Plan steps: ${data.plan.length}`);
+    if (data.artifacts) stats.push(`Artifacts: ${data.artifacts.length}`);
+    els.stats.textContent = stats.join(' • ') || 'No additional stats';
+  }
+
+  // ---------- Event handlers ----------
+  function pulse(el){ el.classList.add('highlight'); setTimeout(()=>el.classList.remove('highlight'),900); }
+
+  // Search filters by text content of all sections
+  els.search.addEventListener('input', () => {
+    const q = els.search.value.trim().toLowerCase();
+    const sections = ['logs', 'plan', 'artifacts', 'scratchpad'];
+
+    sections.forEach(sectionId => {
+      const container = document.getElementById(sectionId);
+      if (!container) return;
+
+      const cards = container.querySelectorAll('.canon-card');
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        const match = !q || text.includes(q);
+        card.style.display = match ? '' : 'none';
+      });
+    });
+  });
+
+  // Expand/Collapse all details
+  els.expandAll.addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = true);
+  });
+  els.collapseAll.addEventListener('click', () => {
+    document.querySelectorAll('details').forEach(d => d.open = false);
+  });
+
+  // Copy / Download
+  els.copyData.addEventListener('click', async ()=>{
+    if (!currentData) return;
+    const dataStr = JSON.stringify(currentData, null, 2);
+    await navigator.clipboard.writeText(dataStr);
+    pulse(els.copyData);
+  });
+  els.copyJson.addEventListener('click', async ()=>{
+    if (!currentData) return;
+    await navigator.clipboard.writeText(JSON.stringify(currentData, null, 2));
+  });
+  els.downloadJson.addEventListener('click', ()=>{
+    if (!currentData) return;
+    const blob = new Blob([JSON.stringify(currentData, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'orchestrator-session.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // ---------- Load data from URL parameter or try to get from parent window ----------
+  function loadSessionData(){
+    try {
+      // Try to get data passed via URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionData = urlParams.get('data');
+
+      if (sessionData) {
+        const data = JSON.parse(decodeURIComponent(sessionData));
+        renderAll(data);
+        return;
+      }
+
+      // Try to get data from parent window (if opened as popup)
+      if (window.opener && window.opener.sessionData) {
+        renderAll(window.opener.sessionData);
+        return;
+      }
+
+      // Default: show message
+      els.overview.innerHTML = '<span class="muted">No session data provided. This viewer should be opened from the main orchestrator interface.</span>';
+    } catch (e) {
+      els.overview.innerHTML = '<span class="muted">Error loading session data: ' + escapeHtml(e.message) + '</span>';
+    }
+  }
+
+  // Boot
+  loadSessionData();
+})();
+</script>
+</body>
+</html>

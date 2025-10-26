@@ -71,6 +71,7 @@ export interface Session {
     scratchpad: string;
     artifacts: Artifact[] | null;
     error: string | null;
+    cost?: number; // Optional cost field for session cost tracking
 }
 
 export interface OrchestrationServices {

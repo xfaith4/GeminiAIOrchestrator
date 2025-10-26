@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScratchpadIcon, CheckCircleIcon, DownloadIcon } from './icons';
+import { ScratchpadIcon, CheckCircleIcon, DownloadIcon, LogViewerIcon } from './icons';
 import { Artifact } from '../types';
 import Loader from './Loader';
 
@@ -14,6 +14,7 @@ interface ArtifactWorkspaceProps {
   scratchpad: string;
   finalArtifacts: Artifact[] | null;
   isLoading: boolean;
+  onViewLogs?: () => void;
 }
 
 const getFileIcon = (lang: string) => {
@@ -29,7 +30,7 @@ const getFileIcon = (lang: string) => {
     }
 }
 
-const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading }) => {
+const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, finalArtifacts, isLoading, onViewLogs }) => {
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
 
   // FIX: Added useEffect to handle side effects, such as updating the selected artifact when finalArtifacts change.
@@ -119,6 +120,15 @@ const ArtifactWorkspace: React.FC<ArtifactWorkspaceProps> = ({ scratchpad, final
                     <CheckCircleIcon className="w-6 h-6" />
                     <h3 className="text-md font-semibold font-sans">Process Completed</h3>
                 </div>
+                {onViewLogs && (
+                    <button
+                        onClick={onViewLogs}
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-brand-primary hover:bg-brand-secondary text-white rounded-md transition-colors"
+                    >
+                        <LogViewerIcon className="w-4 h-4" />
+                        View Logs
+                    </button>
+                )}
             </div>
             
             <div className="grid grid-cols-3 gap-4 flex-grow min-h-0">
