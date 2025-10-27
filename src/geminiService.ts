@@ -21,7 +21,14 @@ function errWrap(resp: Response, body: any) {
   throw new Error(`Gemini HTTP ${status}: ${msg}`);
 }
 
+function checkAPIKey() {
+  if (!API_KEY) {
+    throw new Error("Gemini API key not configured. Please set VITE_GEMINI_API_KEY environment variable.");
+  }
+}
+
 async function listModels(): Promise<string[]> {
+  checkAPIKey();
   const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models?key=${API_KEY}`;
   const r = await fetch(url);
   if (!r.ok) errWrap(r, await r.text());
@@ -35,6 +42,7 @@ async function callModel(
   model: string,
   contents: any
 ): Promise<{ data:any; effectiveModel:string }> {
+  checkAPIKey();
   const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${API_KEY}`;
   const r = await fetch(url, {
     method: "POST",
