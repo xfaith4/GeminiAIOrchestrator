@@ -15,14 +15,20 @@ export type OpenAICallResult = {
   cost?: CostBreakdown;
 };
 
-if (!API_KEY) {
-  throw new Error("OpenAI API key not configured. Please set VITE_OPENAI_API_KEY environment variable.");
-}
+let openai: OpenAI | null = null;
 
-const openai = new OpenAI({
-  apiKey: API_KEY,
-  dangerouslyAllowBrowser: true // Note: In production, API calls should be made from backend
-});
+function getOpenAIClient(): OpenAI {
+  if (!API_KEY) {
+    throw new Error("OpenAI API key not configured. Please set VITE_OPENAI_API_KEY environment variable.");
+  }
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: API_KEY,
+      dangerouslyAllowBrowser: true // Note: In production, API calls should be made from backend
+    });
+  }
+  return openai;
+}
 
 function errWrap(error: any) {
   throw new Error(`OpenAI API Error: ${error.message || error}`);
@@ -32,8 +38,9 @@ async function callModel(
   model: string,
   messages: Array<{role: string, content: string}>
 ): Promise<{ data:any; effectiveModel:string }> {
+  const client = getOpenAIClient();
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model,
       messages: messages as any,
     });
@@ -46,7 +53,7 @@ async function callModel(
     if (error.status === 404 || error.code === 'model_not_found') {
       console.warn(`[OpenAI] ${model} not available. Falling back to ${DEFAULT_MODEL}...`);
       try {
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
           model: DEFAULT_MODEL,
           messages: messages as any,
         });
