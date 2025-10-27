@@ -1,12 +1,12 @@
-# Gemini AI Orchestrator
+# Agentic Workflow Orchestrator
 
-This project provides a Streamlit-based web interface for defining, managing, and executing chains of Gemini AI tasks. It aims to simplify the creation and execution of complex AI workflows by providing a user-friendly UI for orchestration definitions.
+This project provides a Streamlit-based web interface for defining, managing, and executing chains of AI tasks. It aims to simplify the creation and execution of complex AI workflows by providing a user-friendly UI for orchestration definitions.
 
 ## Features
 
 *   **Interactive Web UI:** Built with Streamlit for an intuitive user experience.
 *   **Orchestration Definition:** Define complex AI workflows using a JSON structure.
-*   **Gemini Integration:** Leverage Google's Gemini AI models for task execution.
+*   **Multi-Provider Support:** Choose between Google Gemini and OpenAI ChatGPT for task execution.
 *   **Load & Execute:** Select and run pre-defined or user-saved orchestrations.
 *   **Improved Output Display:** Clear and structured presentation of results and logs.
 
@@ -26,7 +26,7 @@ This project provides a Streamlit-based web interface for defining, managing, an
 ### Prerequisites
 
 *   Python 3.8+
-*   Google Gemini API Key (set as an environment variable)
+*   Google Gemini API Key OR OpenAI API Key (set as environment variables)
 
 ### Installation
 
@@ -47,8 +47,10 @@ This project provides a Streamlit-based web interface for defining, managing, an
     ```bash
     pip install -r requirements.txt
     ```
-4.  **Set your Google Gemini API Key:**
-    The application requires your Google Gemini API key to interact with the models. Set it as an environment variable:
+4.  **Set your AI API Key(s):**
+    The application supports both Google Gemini and OpenAI ChatGPT. Set at least one API key as environment variables:
+
+    **For Google Gemini:**
     ```bash
     # On macOS/Linux
     export GOOGLE_API_KEY="YOUR_GEMINI_API_KEY"
@@ -57,16 +59,28 @@ This project provides a Streamlit-based web interface for defining, managing, an
     # On Windows (PowerShell)
     $env:GOOGLE_API_KEY="YOUR_GEMINI_API_KEY"
     ```
-    Replace `"YOUR_GEMINI_API_KEY"` with your actual key.
+
+    **For OpenAI ChatGPT:**
+    ```bash
+    # On macOS/Linux
+    export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+    # On Windows (Command Prompt)
+    set OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+    # On Windows (PowerShell)
+    $env:OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+    ```
+    Replace the placeholder values with your actual API keys.
 
 ### Running the Application
 
-1.  Ensure your virtual environment is active and `GOOGLE_API_KEY` is set.
+1.  Ensure your virtual environment is active and at least one API key is set (GOOGLE_API_KEY for Gemini or OPENAI_API_KEY for ChatGPT).
 2.  Run the Streamlit application:
     ```bash
     streamlit run app.py
     ```
     This will open the application in your web browser, usually at `http://localhost:8501`.
+
+3.  **Select Provider:** In the application, you can choose between Gemini and OpenAI ChatGPT providers in the settings.
 
 ## How to Use
 

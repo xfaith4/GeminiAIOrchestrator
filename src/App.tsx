@@ -27,10 +27,12 @@ import {
 
 import * as geminiService from './geminiService';
 import * as githubService from './githubService';
+import { createPlanWithMeta, executeStep, reviewStep, synthesizeFinalArtifactWithMeta } from './aiService';
 
 // For test runner mock
 import * as mockGithubService from './services/githubService.mock';
 import { selectFiles } from './services/selectServices';
+import type { Provider } from './types';
 
 // --- Normalizers (conform external results to our local types) ---
 
@@ -183,14 +185,14 @@ const runOrchestrationLogic = async ({
             break;
           }
           default: {
-            const result = await services.gemini.executeStep(step, currentScratchpad, retryReasoning);
+            const result = await executeStep(step, currentScratchpad, retryReasoning, services.provider);
             stepOutput = result.output;
             if (result.cost && onCost) onCost(result.cost.totalUSD, String(step.step));
 
             onLog(step.agent, `Output:\n${stepOutput}`);
 
             onLog('Orchestrator', `Requesting review of step ${step.step} output...`);
-            const review = await services.gemini.reviewStep(step, stepOutput, currentScratchpad);
+            const review = await reviewStep(step, stepOutput, currentScratchpad, services.provider);
             if (review.cost && onCost) onCost(review.cost.totalUSD, `review-${step.step}`);
             onLog('Reviewer', `Decision: ${review.decision}. Reasoning: ${review.reasoning}`);
 
@@ -223,7 +225,7 @@ const runOrchestrationLogic = async ({
 
   onStepUpdate(-1);
   onLog('Orchestrator', 'All steps completed. Synthesizing final artifact workspace...');
-const synth = await services.gemini.synthesizeFinalArtifactWithMeta(currentScratchpad) ;
+const synth = await synthesizeFinalArtifactWithMeta(currentScratchpad, services.provider) ;
 const artifacts = synth.artifacts.map((f: any) => toTypesArtifact(f)) ;
 if (synth.cost && onCost) onCost(synth.cost.totalUSD, "synthesize") ;
 onFinalArtifact(artifacts) ;
@@ -253,6 +255,7 @@ function App() {
     if (saved) return saved === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+  const [selectedProvider, setSelectedProvider] = useState<Provider>('Gemini');
 
   const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -367,7 +370,7 @@ function App() {
       }
       addLogEntry('User', context);
       addLogEntry('Orchestrator', 'Requesting plan from Supervisor...');
-      const planResp = await geminiService.createPlanWithMeta(context) ;
+      const planResp = await createPlanWithMeta(context, selectedProvider) ;
       const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i)) ;
       if (planResp.cost && newSessionId) {
         const cost = planResp.cost.totalUSD;
@@ -416,7 +419,7 @@ function App() {
   goal,
   uploadedFile,
   plan,
-  services: { gemini: geminiService, github: githubService, select: { selectFiles } },
+  services: { gemini: geminiService, github: githubService, select: { selectFiles }, provider: selectedProvider },
   onLog: addLogEntry,
   onScratchpadUpdate: updateScratchpad,
   onStepUpdate: setCurrentStepIndex,
@@ -460,7 +463,7 @@ function App() {
     let testError: string | null = null;
     try {
       const context = `User Goal: ${testGoal}`;
-      const planResp = await geminiService.createPlanWithMeta(context);
+      const planResp = await createPlanWithMeta(context, 'Gemini'); // Use Gemini for tests
       const createdPlan = planResp.plan.map((s: any, i: number) => toTypesPlanStep(s, i));
       if (planResp.cost) {
         // Note: Not adding to session cost for tests
@@ -470,7 +473,7 @@ function App() {
         goal: testGoal,
         uploadedFile: null,
         plan: createdPlan,
-        services: { gemini: geminiService, github: mockGithubService, select: { selectFiles } },
+        services: { gemini: geminiService, github: mockGithubService, select: { selectFiles }, provider: 'Gemini' as Provider },
         onLog: (agent, message, type = 'info') => testLogs.push({ timestamp: new Date(), agent, message, type }),
         onScratchpadUpdate: () => '',
         onStepUpdate: () => {},
@@ -496,6 +499,15 @@ function App() {
           <h1 className="text-2xl font-bold text-white">Agentic Workflow Orchestrator</h1>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value as Provider)}
+            className="px-3 py-2 rounded-md bg-base-300 text-content-100 border border-base-200 text-sm"
+            title="Select AI Provider"
+          >
+            <option value="Gemini">Gemini</option>
+            <option value="OpenAI">OpenAI ChatGPT</option>
+          </select>
           <button
             type="button"
             onClick={handleThemeToggle}

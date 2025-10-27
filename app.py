@@ -34,12 +34,12 @@ def save_orchestrations(orchestrations_dict, file_path=ORCHESTRATIONS_FILE):
 # --- Orchestration Logic (adapted from original repository's app.py) ---
 # This function would contain the actual Gemini API calls.
 # For this example, it uses simulated outputs.
-def orchestrate(orchestration_data):
+def orchestrate(orchestration_data, provider="Gemini"):
     """
-    Executes the Gemini AI orchestration defined in orchestration_data.
+    Executes the AI orchestration defined in orchestration_data.
     Modifies st.session_state.orchestration_log directly.
     """
-    st.session_state.orchestration_log = "Starting orchestration...\n"
+    st.session_state.orchestration_log = f"Starting orchestration using {provider}...\n"
     final_output = {}
     try:
         orchestration_name = orchestration_data.get("name", "Unnamed Orchestration")
@@ -51,23 +51,32 @@ def orchestrate(orchestration_data):
 
         # Execute tasks sequentially or based on dependencies
         for task_id, task_definition in tasks.items():
-            st.session_state.orchestration_log += f"Executing task: {task_id}\n"
-            model_name = task_definition.get("model", "gemini-pro")
+            st.session_state.orchestration_log += f"Executing task: {task_id} using {provider}\n"
+            model_name = task_definition.get("model", "gemini-pro" if provider == "Gemini" else "gpt-4o")
             prompt = task_definition.get("prompt")
 
-            # --- Actual Gemini API call (uncomment and configure if needed) ---
-            # import google.generativeai as genai
-            # genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
-            # if not genai.api_key:
-            #     raise ValueError("GOOGLE_API_KEY environment variable not set.")
-            # model = genai.GenerativeModel(model_name)
-            # response = model.generate_content(prompt)
-            # task_output = response.text
-            # -------------------------------------------------------------------
+            # API call based on selected provider
+            if provider == "Gemini":
+                # --- Gemini API call ---
+                import google.generativeai as genai
+                genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+                if not genai.api_key:
+                    raise ValueError("GOOGLE_API_KEY environment variable not set.")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                task_output = response.text
+            else:  # OpenAI
+                # --- OpenAI API call ---
+                import openai
+                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                if not client.api_key:
+                    raise ValueError("OPENAI_API_KEY environment variable not set.")
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                task_output = response.choices[0].message.content
 
-            # Simulate Gemini response for demonstration purposes
-            time.sleep(SIMULATION_DELAY_SECONDS)  # Simulate API call delay
-            task_output = f"Simulated output for prompt: '{prompt[:50]}...' (Model: {model_name})"
             final_output[task_id] = {"output": task_output}
             st.session_state.orchestration_log += f"Task {task_id} completed. Output: {task_output[:70]}...\n"
 
@@ -110,11 +119,46 @@ if 'current_orchestration_name_for_editing' not in st.session_state:
     st.session_state.current_orchestration_name_for_editing = ""
 
 # --- Main Streamlit App ---
-st.title("Gemini AI Orchestrator")
+st.title("Agentic Workflow Orchestrator")
 
-st.info("💡 **Hint:** Ensure your `GOOGLE_API_KEY` environment variable is set for actual orchestration execution.")
+st.info("💡 **Hint:** Ensure you have set either `GOOGLE_API_KEY` (for Gemini) or `OPENAI_API_KEY` (for ChatGPT) environment variables for actual orchestration execution.")
 
-# --- Orchestration Management ---
+# --- Provider Selection ---
+st.subheader("AI Provider Selection")
+col_provider1, col_provider2 = st.columns(2)
+
+with col_provider1:
+    # Initialize provider selection in session state
+    if 'selected_provider' not in st.session_state:
+        st.session_state.selected_provider = "Gemini"
+
+    # Provider selection dropdown
+    provider = st.selectbox(
+        "Choose AI Provider",
+        ["Gemini", "OpenAI ChatGPT"],
+        index=0 if st.session_state.selected_provider == "Gemini" else 1,
+        key="provider_select",
+        help="Select which AI provider to use for orchestration tasks."
+    )
+    st.session_state.selected_provider = provider
+
+with col_provider2:
+    # Show API key status
+    google_key_set = os.environ.get("GOOGLE_API_KEY") is not None
+    openai_key_set = os.environ.get("OPENAI_API_KEY") is not None
+
+    if provider == "Gemini":
+        if google_key_set:
+            st.success("✅ Gemini API key is configured")
+        else:
+            st.warning("⚠️ Gemini API key not found. Set GOOGLE_API_KEY environment variable.")
+    else:  # OpenAI
+        if openai_key_set:
+            st.success("✅ OpenAI API key is configured")
+        else:
+            st.warning("⚠️ OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+
+st.markdown("---")
 st.header("Manage Orchestrations")
 
 orchestrations = load_orchestrations()
@@ -244,7 +288,7 @@ if st.button("Execute Orchestration", type="primary", help="Run the currently de
     if orchestration_data:
         try:
             with st.spinner("🚀 Executing orchestration... Please wait."):
-                result = orchestrate(orchestration_data) # orchestrate function updates log directly
+                result = orchestrate(orchestration_data, st.session_state.selected_provider) # orchestrate function updates log directly
             st.success("✅ Orchestration completed successfully!")
             st.session_state.orchestration_result = json.dumps(result, indent=2) # Store as JSON string
         except ValueError as ve:

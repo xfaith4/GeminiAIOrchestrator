@@ -74,12 +74,15 @@ export interface Session {
     cost?: number; // Optional cost field for session cost tracking
 }
 
+export type Provider = 'Gemini' | 'OpenAI';
+
 export interface OrchestrationServices {
   gemini: typeof geminiService;
   github: typeof githubService;
   select: {
     selectFiles: (fileTree: Array<{ path: string; type: string }>, context: string, step: any) => Promise<{ files: string[] }>;
   };
+  provider: Provider;
 }
 
 export interface OrchestrationParams {
